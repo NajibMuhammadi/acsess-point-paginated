@@ -8,7 +8,7 @@ services:
             - "3000"
         labels:
             - "traefik.enable=true"
-            - "traefik.http.routers.frontend.rule=Host(`b.serima.se`)"
+            - "traefik.http.routers.frontend.rule=Host(`najib.serima.se`)"
             - "traefik.http.services.frontend.loadbalancer.server.port=3000"
             - "traefik.http.routers.frontend.entrypoints=websecure"
             - "traefik.http.routers.frontend.tls.certresolver=myresolver"
@@ -24,7 +24,7 @@ services:
             - "5000"
         labels:
             - "traefik.enable=true"
-            - "traefik.http.routers.backend.rule=Host(`b.serima.se`) && PathPrefix(`/api`)"
+            - "traefik.http.routers.backend.rule=Host(`najib.serima.se`) && PathPrefix(`/api`)"
             - "traefik.http.services.backend.loadbalancer.server.port=5000"
             - "traefik.http.routers.backend.entrypoints=websecure"
             - "traefik.http.routers.backend.tls.certresolver=myresolver"
