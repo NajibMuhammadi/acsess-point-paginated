@@ -1,0 +1,11 @@
+version: "3.8"
+services:
+    backend:
+        build: ./backend
+        container_name: backend_c
+        ports:
+            - "5000:5000"
+        stdin_open: true
+        tty: true
+        environment:
+            - PORT=5000
