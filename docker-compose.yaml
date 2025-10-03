@@ -1,5 +1,16 @@
 version: "3.8"
+
 services:
+    frontend:
+        build: ./frontend
+        container_name: frontend_c
+        ports:
+            - "3000:3000"
+        environment:
+            - NODE_ENV=production
+        depends_on:
+            - backend
+
     backend:
         build: ./backend
         container_name: backend_c
@@ -9,3 +20,4 @@ services:
         tty: true
         environment:
             - PORT=5000
+            - NODE_ENV=production
