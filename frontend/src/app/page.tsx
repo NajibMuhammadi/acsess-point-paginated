@@ -578,6 +578,9 @@ export default function StationRegistrationPage() {
                                 >
                                     Registrera Station
                                 </button>
+                                <button onClick={connectSerial}>
+                                    Anslut kortläsare
+                                </button>
                             </form>
                         </>
                     ) : (
