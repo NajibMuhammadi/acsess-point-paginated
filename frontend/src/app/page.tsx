@@ -233,29 +233,21 @@ export default function StationRegistrationPage() {
         setMessage("Registrerar station...");
 
         try {
+            // 🟡 NYTT: Hantera kortläsaranslutning med getPorts + requestPort
             const ports = await (navigator as any).serial.getPorts();
-            if (ports.length === 0) {
-                setMessage(
-                    "⚠️ Ingen kortläsare hittad. Koppla in en innan registrering."
-                );
-                setIsSuccess(false);
-                setIsLoading(false);
-                setSerialStatus("not-found");
-                return;
+            let portToUse = ports[0];
+
+            if (!portToUse) {
+                // 🟡 Om ingen port hittas – be användaren välja en
+                portToUse = await (navigator as any).serial.requestPort();
             }
-            try {
-                await ports[0].open({ baudRate: 9600 });
-                await ports[0].close(); // vi stänger igen efter test
-                setSerialStatus("connected");
-            } catch (err) {
-                setMessage(
-                    "⚠️ Kunde inte öppna kortläsaren. Kontrollera anslutningen."
-                );
-                setIsSuccess(false);
-                setIsLoading(false);
-                setSerialStatus("not-found");
-                return;
-            }
+
+            // ✅ Testa att öppna och stänga porten för att bekräfta att kortläsaren fungerar
+            await portToUse.open({ baudRate: 9600 });
+            await portToUse.close();
+
+            setSerialStatus("connected");
+            console.log("✅ Kortläsare hittad och fungerar");
 
             // ✅ Om kortläsare hittad och öppen → registrera station
             setMessage("Registrerar station...");
