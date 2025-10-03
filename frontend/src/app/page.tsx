@@ -477,6 +477,7 @@ export default function StationRegistrationPage() {
     return (
         <main className="flex-grow flex items-center justify-center min-h-screen bg-background-light dark:bg-background-dark font-display text-text-light dark:text-text-dark">
             <div className="w-full max-w-lg mx-auto p-4 sm:p-6 lg:p-8 text-center">
+                <button onClick={connectSerial}>Anslut kortläsare</button>
                 <div className="bg-white dark:bg-background-dark rounded-xl shadow-lg border border-subtle-light dark:border-subtle-dark/20 p-8 space-y-6">
                     {isInitializing ? (
                         // Visa en loading spinner medan vi kontrollerar localStorage
@@ -577,9 +578,6 @@ export default function StationRegistrationPage() {
                                     className="w-full bg-primary text-white font-bold py-3 px-4 rounded-lg hover:bg-primary/90 transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-2"
                                 >
                                     Registrera Station
-                                </button>
-                                <button onClick={connectSerial}>
-                                    Anslut kortläsare
                                 </button>
                             </form>
                         </>
