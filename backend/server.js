@@ -10,6 +10,7 @@ import stationRouter from "./routes/stationRoutes.js";
 import adminRouter from "./routes/adminRoutes.js";
 import buildingRouter from "./routes/buildingRoutes.js";
 import attendanceRouter from "./routes/attendanceRoutes.js";
+import { startHeartbeatMonitor } from "./controllers/stationController.js";
 
 dotenv.config();
 const PORT = process.env.PORT || 5000;
@@ -116,3 +117,4 @@ async function startServer() {
     }
 }
 startServer();
+startHeartbeatMonitor();

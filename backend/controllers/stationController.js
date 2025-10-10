@@ -38,6 +38,8 @@ export async function createStation(req, res) {
             secret: crypto.randomBytes(32).toString("hex"),
             isApproved: false,
             createdAt: new Date(),
+            lastActive: null,
+            isOnline: false,
         };
 
         await companiesCol.updateOne(
@@ -201,4 +203,115 @@ export async function updateStationApproval(req, res) {
         console.error("Error updating station approval:", err);
         res.status(500).json({ success: false, message: "Serverfel" });
     }
+}
+
+// Minimal heartbeat endpoint
+export async function heartbeat(req, res) {
+    try {
+        // authStation middleware should attach req.station and req.companyId
+        const station = req.station;
+        const companyId = req.companyId;
+
+        if (!station || !companyId) {
+            return res.status(401).json({
+                success: false,
+                message: "Ingen giltig station/session",
+            });
+        }
+
+        const companiesCol = getCompaniesCollection();
+        const now = new Date();
+
+        await companiesCol.updateOne(
+            { _id: companyId, "stations.stationId": station.stationId },
+            {
+                $set: {
+                    "stations.$.lastPing": now,
+                    "stations.$.isOnline": true,
+                },
+            }
+        );
+
+        io.to(companyId.toString()).emit("stationStatusUpdated", {
+            stationId: station.stationId,
+            isOnline: true,
+            lastPing: now,
+        });
+
+        return res.json({
+            success: true,
+            message: "Heartbeat mottaget",
+            time: now,
+        });
+    } catch (err) {
+        console.error("Heartbeat error:", err);
+        return res.status(500).json({ success: false, message: "Serverfel" });
+    }
+}
+export function startHeartbeatMonitor() {
+    setInterval(async () => {
+        const companiesCol = getCompaniesCollection();
+        const now = Date.now();
+        const TIMEOUT = 20000;
+
+        try {
+            // Hämta alla företag med minst en online-station
+            const companies = await companiesCol
+                .find({ "stations.isOnline": true })
+                .toArray();
+
+            // Gå igenom varje företag separat
+            for (const company of companies) {
+                const offlineStations = [];
+
+                // Hitta vilka stationer i DETTA företag som ska gå offline
+                for (const station of company.stations || []) {
+                    if (!station.isOnline || !station.lastPing) continue;
+
+                    const timeSinceLastPing =
+                        now - new Date(station.lastPing).getTime();
+
+                    if (timeSinceLastPing > TIMEOUT) {
+                        offlineStations.push({
+                            stationId: station.stationId,
+                            lastPing: station.lastPing,
+                        });
+                    }
+                }
+
+                // Uppdatera bara OM detta företag har stationer som ska gå offline
+                if (offlineStations.length > 0) {
+                    console.log(
+                        `🚨 Företag ${company._id} – markerar offline:`,
+                        offlineStations.map((s) => s.stationId)
+                    );
+
+                    // Uppdatera varje station i DETTA företag
+                    for (const station of offlineStations) {
+                        await companiesCol.updateOne(
+                            {
+                                _id: company._id, // Detta specifika företag
+                                "stations.stationId": station.stationId,
+                            },
+                            {
+                                $set: { "stations.$.isOnline": false },
+                            }
+                        );
+
+                        // Skicka event BARA till detta företags admin
+                        io.to(company._id.toString()).emit(
+                            "stationStatusUpdated",
+                            {
+                                stationId: station.stationId,
+                                isOnline: false,
+                                lastPing: station.lastPing,
+                            }
+                        );
+                    }
+                }
+            }
+        } catch (err) {
+            console.error("❌ Heartbeat monitor error:", err);
+        }
+    }, 15000);
 }

@@ -78,6 +78,7 @@ export default function StationRegistrationPage() {
     const [port, setPort] = useState<SerialPort | null>(null);
     const isProcessingRef = useRef(false);
     const readerRef = useRef<ReadableStreamDefaultReader | null>(null);
+    const isOfflineRef = useRef<boolean>(false);
 
     const [isOffline, setIsOffline] = useState(false);
 
@@ -108,28 +109,56 @@ export default function StationRegistrationPage() {
 
         reconnectSerial();
     }, [isStationActive]);
-
     useEffect(() => {
-        const interval = setInterval(async () => {
+        const checkHeartbeat = async () => {
+            console.log(" Heartbeat körs...");
+
             try {
-                const response = await fetch(
-                    "https://example.com/api/fake-test" // 💡 byt till ditt API
+                const token = localStorage.getItem("stationToken");
+                if (!token) {
+                    console.log("⚠️ Ingen token — offline");
+                    setIsOffline(true);
+                    return;
+                }
+
+                const res = await fetch(
+                    `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/station/heartbeat`,
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`,
+                        },
+                        cache: "no-store",
+                    }
                 );
 
-                if (response.status === 401) {
-                    console.warn("🚨 401 – station offline");
+                const text = await res.text();
+                console.log("Heartbeat:", res.status, text);
+                console.log("Statuskod:", res.status);
+
+                if (res.status === 404 || !res.ok) {
                     setIsOffline(true);
                 } else {
                     setIsOffline(false);
                 }
-            } catch {
-                console.error("❌ nätverksfel – station offline");
+            } catch (err) {
+                console.error("❌ Heartbeat request failed:", err);
                 setIsOffline(true);
             }
-        }, 10000); // 🔁 var 10 sekund
+        };
+
+        checkHeartbeat(); // kör direkt
+        const interval = setInterval(checkHeartbeat, 10000);
+        console.log("Heartbeat loop startad 🔁");
 
         return () => clearInterval(interval);
     }, []);
+
+    // keep a ref in sync so long-running loops/readers see the latest value
+    useEffect(() => {
+        isOfflineRef.current = isOffline;
+    }, [isOffline]);
 
     // denna funktion läser kontinuerligt från den seriella porten och hanterar kortläsarens data och uppdaterar state och UI baserat på det
     const startSerialReading = async (serialPort: SerialPort) => {
@@ -145,6 +174,12 @@ export default function StationRegistrationPage() {
             readerRef.current = reader;
 
             while (true) {
+                if (isOfflineRef.current) {
+                    console.warn(
+                        "Reader loop exiting because station is offline"
+                    );
+                    break;
+                }
                 try {
                     const { value, done } = await reader.read();
 
@@ -178,8 +213,14 @@ export default function StationRegistrationPage() {
 
                             console.log(`🔖 Card scanned: ${cleanUID}`);
 
-                            // Auto-submit attendance
-                            await submitAttendance(cleanUID);
+                            if (!isOfflineRef.current) {
+                                await submitAttendance(cleanUID);
+                            } else {
+                                console.warn(
+                                    "Station is offline — ignoring scanned UID",
+                                    cleanUID
+                                );
+                            }
 
                             buffer = "";
                         }
@@ -327,6 +368,13 @@ export default function StationRegistrationPage() {
     const submitAttendance = async (uid: string) => {
         if (!uid?.trim()) {
             setAttendanceMessage("UID krävs");
+            return;
+        }
+
+        if (isOffline) {
+            setAttendanceMessage(
+                "Station offline — kan inte registrera närvaro"
+            );
             return;
         }
 
@@ -502,17 +550,7 @@ export default function StationRegistrationPage() {
         <main className="flex-grow flex items-center justify-center min-h-screen bg-background-light dark:bg-background-dark font-display text-text-light dark:text-text-dark">
             <div className="w-full max-w-lg mx-auto p-4 sm:p-6 lg:p-8 text-center">
                 <button onClick={connectSerial}>Anslut kortläsare</button>
-                {isOffline && (
-                    <div className="fixed inset-0 bg-red-700 text-white flex flex-col items-center justify-center z-50">
-                        <h1 className="text-5xl font-bold mb-6">
-                            🚨 Stationen är offline
-                        </h1>
-                        <p className="text-xl opacity-90">
-                            Försöker återansluta...
-                        </p>
-                    </div>
-                )}
-                <div className="bg-white dark:bg-background-dark rounded-xl shadow-lg border border-subtle-light dark:border-subtle-dark/20 p-8 space-y-6">
+                <div className="relative bg-white dark:bg-background-dark rounded-xl shadow-lg border border-subtle-light dark:border-subtle-dark/20 p-8 space-y-6">
                     {isInitializing ? (
                         // Visa en loading spinner medan vi kontrollerar localStorage
                         <div className="flex flex-col items-center space-y-4">
@@ -617,6 +655,24 @@ export default function StationRegistrationPage() {
                         </>
                     ) : (
                         <>
+                            <div className="absolute right-3 top-3 z-50 pointer-events-none">
+                                <span
+                                    className={`inline-flex items-center gap-2 text-sm font-medium ${
+                                        isOffline
+                                            ? "text-red-500"
+                                            : "text-green-500"
+                                    }`}
+                                >
+                                    <span
+                                        className={`w-2 h-2 rounded-full ${
+                                            isOffline
+                                                ? "bg-red-500"
+                                                : "bg-green-500"
+                                        }`}
+                                    ></span>
+                                    {isOffline ? "Offline" : "Online"}
+                                </span>
+                            </div>
                             <span className="material-symbols-outlined text-7xl text-primary">
                                 <Nfc className="h-12 w-12 mx-auto mb-4" />
                             </span>
@@ -648,13 +704,15 @@ export default function StationRegistrationPage() {
                                             })
                                         }
                                         className="form-input w-full h-14 pl-12 pr-4 rounded-lg bg-background-light dark:bg-subtle-dark/20 border-subtle-light dark:border-subtle-dark focus:ring-primary focus:border-primary transition-colors"
-                                        disabled={attendanceLoading}
+                                        disabled={
+                                            attendanceLoading || isOffline
+                                        }
                                         required
                                     />
                                 </div>
                                 <button
                                     type="submit"
-                                    disabled={attendanceLoading}
+                                    disabled={attendanceLoading || isOffline}
                                     className="w-full bg-primary text-white font-bold py-3 px-4 rounded-lg hover:bg-primary/90 transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-2"
                                 >
                                     Registrera Närvaro

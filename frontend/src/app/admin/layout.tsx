@@ -150,6 +150,20 @@ export default function AdminLayout({
                 });
             });
 
+            s.on("stationStatusUpdated", (data: any) => {
+                setStations((prev) =>
+                    prev.map((s) =>
+                        s.stationId === data.stationId
+                            ? {
+                                  ...s,
+                                  isOnline: data.isOnline,
+                                  lastPing: data.lastPing,
+                              }
+                            : s
+                    )
+                );
+            });
+
             setSocket(s);
             return () => s.disconnect();
         };

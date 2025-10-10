@@ -207,7 +207,10 @@ export default function BuildingsPage() {
                                     Created At
                                 </th>
                                 <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                                    Station Status
+                                    Last activity
+                                </th>
+                                <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                                    Station Approval
                                 </th>
                                 <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                                     Actions
@@ -276,6 +279,29 @@ export default function BuildingsPage() {
                                             </span>
                                         </div>
                                     </td>
+                                    <td>
+                                        <div className="flex items-center gap-2">
+                                            <span
+                                                className={`w-2 h-2 rounded-full ${
+                                                    station.isOnline
+                                                        ? "bg-green-500"
+                                                        : "bg-red-500"
+                                                }`}
+                                            />
+                                            <div className="text-sm">
+                                                {station.isOnline
+                                                    ? "Online"
+                                                    : "Offline"}
+                                            </div>
+                                            <div className="text-xs text-gray-400">
+                                                {station.lastPing
+                                                    ? new Date(
+                                                          station.lastPing
+                                                      ).toLocaleTimeString()
+                                                    : ""}
+                                            </div>
+                                        </div>
+                                    </td>
                                     <td className="py-4 px-6">
                                         <Select
                                             value={
@@ -309,6 +335,7 @@ export default function BuildingsPage() {
                                             </SelectContent>
                                         </Select>
                                     </td>
+
                                     <td className="py-4 px-6">
                                         <Button
                                             variant="outline"
