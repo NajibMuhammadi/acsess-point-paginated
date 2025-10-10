@@ -20,7 +20,7 @@ const server = http.createServer(app);
 export const io = new Server(server, {
     cors: {
         origin: [
-            "https://najib.serima.se",
+            "https://checkpoint.app.serima.se",
             "http://localhost:3000",
             "http://172.20.20.47:3000",
             "http://127.0.0.1:3000",
@@ -33,7 +33,7 @@ export const io = new Server(server, {
 app.use(
     cors({
         origin: [
-            "https://najib.serima.se",
+            "https://checkpoint.app.serima.se",
             "http://localhost:3000",
             "http://172.20.20.47:3000",
             "http://127.0.0.1:3000",
