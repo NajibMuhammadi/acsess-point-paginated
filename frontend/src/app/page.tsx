@@ -79,6 +79,8 @@ export default function StationRegistrationPage() {
     const isProcessingRef = useRef(false);
     const readerRef = useRef<ReadableStreamDefaultReader | null>(null);
 
+    const [isOffline, setIsOffline] = useState(false);
+
     useEffect(() => {
         const savedToken = localStorage.getItem("stationToken");
         if (savedToken) {
@@ -106,6 +108,28 @@ export default function StationRegistrationPage() {
 
         reconnectSerial();
     }, [isStationActive]);
+
+    useEffect(() => {
+        const interval = setInterval(async () => {
+            try {
+                const response = await fetch(
+                    "https://example.com/api/fake-test" // 💡 byt till ditt API
+                );
+
+                if (response.status === 401) {
+                    console.warn("🚨 401 – station offline");
+                    setIsOffline(true);
+                } else {
+                    setIsOffline(false);
+                }
+            } catch {
+                console.error("❌ nätverksfel – station offline");
+                setIsOffline(true);
+            }
+        }, 10000); // 🔁 var 10 sekund
+
+        return () => clearInterval(interval);
+    }, []);
 
     // denna funktion läser kontinuerligt från den seriella porten och hanterar kortläsarens data och uppdaterar state och UI baserat på det
     const startSerialReading = async (serialPort: SerialPort) => {
@@ -478,6 +502,16 @@ export default function StationRegistrationPage() {
         <main className="flex-grow flex items-center justify-center min-h-screen bg-background-light dark:bg-background-dark font-display text-text-light dark:text-text-dark">
             <div className="w-full max-w-lg mx-auto p-4 sm:p-6 lg:p-8 text-center">
                 <button onClick={connectSerial}>Anslut kortläsare</button>
+                {isOffline && (
+                    <div className="fixed inset-0 bg-red-700 text-white flex flex-col items-center justify-center z-50">
+                        <h1 className="text-5xl font-bold mb-6">
+                            🚨 Stationen är offline
+                        </h1>
+                        <p className="text-xl opacity-90">
+                            Försöker återansluta...
+                        </p>
+                    </div>
+                )}
                 <div className="bg-white dark:bg-background-dark rounded-xl shadow-lg border border-subtle-light dark:border-subtle-dark/20 p-8 space-y-6">
                     {isInitializing ? (
                         // Visa en loading spinner medan vi kontrollerar localStorage
