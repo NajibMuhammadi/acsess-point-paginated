@@ -6,12 +6,6 @@ services:
         container_name: frontend_c
         expose:
             - "3000"
-        labels:
-            - "traefik.enable=true"
-            - "traefik.http.routers.frontend.rule=Host(`najib.serima.se`)"
-            - "traefik.http.services.frontend.loadbalancer.server.port=3000"
-            - "traefik.http.routers.frontend.entrypoints=websecure"
-            - "traefik.http.routers.frontend.tls.certresolver=myresolver"
         environment:
             - NODE_ENV=production
         depends_on:
@@ -22,12 +16,6 @@ services:
         container_name: backend_c
         expose:
             - "5000"
-        labels:
-            - "traefik.enable=true"
-            - "traefik.http.routers.backend.rule=Host(`najib.serima.se`) && PathPrefix(`/api`)"
-            - "traefik.http.services.backend.loadbalancer.server.port=5000"
-            - "traefik.http.routers.backend.entrypoints=websecure"
-            - "traefik.http.routers.backend.tls.certresolver=myresolver"
         environment:
             - PORT=5000
             - NODE_ENV=production
