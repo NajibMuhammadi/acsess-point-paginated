@@ -129,7 +129,7 @@ export default function StationRegistrationPage() {
                     console.log(
                         "✅ Tidigare port hittad – ansluter automatiskt"
                     );
-                    await connectToPort(ports[0]);
+                    await connectToPort(ports[4]);
                 } else {
                     console.warn("⚠️ Ingen tidigare port hittad");
                 }
@@ -320,18 +320,6 @@ export default function StationRegistrationPage() {
         }
         setSerialHeartbeat("error");
         serialHeartbeatRef.current = "error";
-    };
-
-    /** ===== Manuell portval ===== */
-    const requestSerialPort = async () => {
-        try {
-            console.log("📡 Begär manuell portval...");
-            const selectedPort = await (navigator as any).serial.requestPort();
-            console.log("✅ Port vald:", selectedPort);
-            await connectToPort(selectedPort);
-        } catch (err) {
-            console.error("❌ Portval avbrutet:", err);
-        }
     };
 
     /** ===== Läs från port (kontinuerlig loop) ===== */
@@ -912,20 +900,6 @@ ${
                                 Place your card near the scanner or manually
                                 type in your unique identifier below.
                             </p>
-
-                            {serialHeartbeat === "error" && (
-                                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-center">
-                                    <p className="text-red-600 dark:text-red-400 text-sm mb-3">
-                                        🔌 Kortläsare inte ansluten
-                                    </p>
-                                    <button
-                                        onClick={requestSerialPort}
-                                        className="bg-primary text-white font-medium py-2 px-4 rounded-lg hover:bg-primary/90 transition-colors"
-                                    >
-                                        Välj kortläsare
-                                    </button>
-                                </div>
-                            )}
 
                             <form
                                 onSubmit={handleAttendance}
