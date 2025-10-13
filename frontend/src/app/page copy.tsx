@@ -11,7 +11,6 @@ import {
     UserPlus,
 } from "lucide-react";
 
-/** ======= Typer ======= */
 interface RegistrationResult {
     success: boolean;
     token?: string;
@@ -30,27 +29,16 @@ interface SerialPort {
     writable: WritableStream | null;
     open(options: { baudRate: number }): Promise<void>;
     close(): Promise<void>;
-    // vissa implementationer har ondisconnect; vi sätter den dynamiskt via (as any)
 }
 
 interface Navigator {
     serial: {
         requestPort(): Promise<SerialPort>;
         getPorts(): Promise<SerialPort[]>;
-        addEventListener?: (
-            type: "connect" | "disconnect",
-            cb: (ev: any) => void
-        ) => void;
-        removeEventListener?: (
-            type: "connect" | "disconnect",
-            cb: (ev: any) => void
-        ) => void;
     };
 }
 
-/** ======= Komponent ======= */
 export default function StationRegistrationPage() {
-    /** ===== UI state ===== */
     const [stationId, setStationId] = useState("");
     const [secret, setSecret] = useState("");
     const [isLoading, setIsLoading] = useState(false);
@@ -60,7 +48,6 @@ export default function StationRegistrationPage() {
         useState<RegistrationResult | null>(null);
     const [isStationActive, setIsStationActive] = useState(false);
     const [isInitializing, setIsInitializing] = useState(true);
-
     const [attendanceData, setAttendanceData] = useState<AttendanceData>({
         uid: "",
         visitorName: "",
@@ -82,110 +69,58 @@ export default function StationRegistrationPage() {
         direction: "in" | "out";
     } | null>(null);
 
-    /** ===== Serial/heartbeat state ===== */
+    // Serial port states
+    const [port, setPort] = useState<SerialPort | null>(null);
+    const isProcessingRef = useRef(false);
+    const readerRef = useRef<ReadableStreamDefaultReader | null>(null);
+    const isOfflineRef = useRef<boolean>(false);
+
+    // Serial heartbeat state
     const [serialHeartbeat, setSerialHeartbeat] = useState<
         "ok" | "error" | "checking"
     >("checking");
-    const [isOffline, setIsOffline] = useState(false);
-
-    // Sammanlagd OFFLINE (API eller SERIAL)
-    const isSystemOffline = isOffline || serialHeartbeat === "error";
-
-    /** ===== Refs (för att undvika stale state i async-loops) ===== */
-    const portRef = useRef<SerialPort | null>(null);
-    const readerRef = useRef<ReadableStreamDefaultReader | null>(null);
-    const isProcessingRef = useRef(false);
-    const isOfflineRef = useRef<boolean>(false);
     const serialHeartbeatRef = useRef<"ok" | "error" | "checking">("checking");
 
-    /** ===== Init: kolla token ===== */
+    const [isOffline, setIsOffline] = useState(false);
+
+    // Combined offline state - true if either API or serial heartbeat fails
+    const isSystemOffline = isOffline || serialHeartbeat === "error";
+
     useEffect(() => {
         const savedToken = localStorage.getItem("stationToken");
         if (savedToken) {
-            console.log("💾 Token hittad i localStorage");
             setIsStationActive(true);
             setRegistrationResult({ success: true, token: savedToken });
         }
-        setIsInitializing(false);
+        setIsInitializing(false); // Markera att initialiseringen är klar
     }, []);
 
-    /** ===== Sync ref-värden ===== */
-    useEffect(() => {
-        isOfflineRef.current = isOffline;
-    }, [isOffline]);
-    useEffect(() => {
-        serialHeartbeatRef.current = serialHeartbeat;
-    }, [serialHeartbeat]);
-
-    /** ===== Auto-reconnect av tidigare godkänd port när station blir aktiv ===== */
+    // Automatisk anslutning till seriell port när stationen blir aktiv
     useEffect(() => {
         if (!isStationActive) return;
 
         const reconnectSerial = async () => {
             try {
-                console.log("🔍 Letar efter tidigare godkända portar...");
                 const ports = await (navigator as any).serial.getPorts();
                 if (ports.length > 0) {
-                    console.log(
-                        "✅ Tidigare port hittad – ansluter automatiskt"
-                    );
                     await connectToPort(ports[0]);
-                } else {
-                    console.warn("⚠️ Ingen tidigare port hittad");
                 }
             } catch (err) {
-                console.error("💥 Fel vid automatisk återanslutning:", err);
+                // Silent error handling
             }
         };
 
         reconnectSerial();
     }, [isStationActive]);
-
-    /** ===== Lyssna på OS-nivåns connect/disconnect events (om stöd finns) ===== */
     useEffect(() => {
-        const navSerial = (navigator as any).serial;
-        if (!navSerial?.addEventListener) return;
-        const onConnect = async (event: any) => {
-            console.log("🔌 [event] serial.connect:", event?.port || "(okänd)");
-            try {
-                // Om vi inte redan har en port — försök ansluta den som anslöts
-                if (!portRef.current && event?.port) {
-                    await connectToPort(event.port);
-                }
-            } catch (err) {
-                console.error("💥 Fel i onConnect:", err);
-            }
-        };
-        const onDisconnect = async (event: any) => {
-            console.warn(
-                "🔌 [event] serial.disconnect:",
-                event?.port || "(okänd)"
-            );
-            await disconnectSerial();
-        };
-
-        navSerial.addEventListener("connect", onConnect);
-        navSerial.addEventListener("disconnect", onDisconnect);
-
-        return () => {
-            try {
-                navSerial.removeEventListener("connect", onConnect);
-                navSerial.removeEventListener("disconnect", onDisconnect);
-            } catch {
-                /* ignore */
-            }
-        };
-    }, []);
-
-    /** ===== Backend heartbeat ===== */
-    useEffect(() => {
-        if (!isStationActive) return;
-
         const checkHeartbeat = async () => {
-            const token = localStorage.getItem("stationToken");
-            if (!token) return;
-
             try {
+                const token = localStorage.getItem("stationToken");
+                if (!token) {
+                    setIsOffline(true);
+                    return;
+                }
+
                 const res = await fetch(
                     `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/station/heartbeat`,
                     {
@@ -198,133 +133,78 @@ export default function StationRegistrationPage() {
                     }
                 );
 
-                if (res.ok) {
-                    if (isOfflineRef.current)
-                        console.log("💚 Station online igen!");
-                    setIsOffline(false);
-                    isOfflineRef.current = false;
-                } else {
-                    console.warn("🚨 Station offline (felstatus):", res.status);
-                    setIsOffline(true);
-                    isOfflineRef.current = true;
-                }
+                setIsOffline(!res.ok);
             } catch (err) {
-                console.error("❌ Nätverksfel i heartbeat:", err);
                 setIsOffline(true);
-                isOfflineRef.current = true;
             }
         };
 
         checkHeartbeat();
         const interval = setInterval(checkHeartbeat, 10000);
         return () => clearInterval(interval);
-    }, [isStationActive]);
+    }, []);
 
-    /** ===== Serial heartbeat (kollar portläge; försöker återansluta) ===== */
+    // keep a ref in sync so long-running loops/readers see the latest value
+    useEffect(() => {
+        isOfflineRef.current = isOffline;
+    }, [isOffline]);
+
+    // keep serial heartbeat ref in sync
+    useEffect(() => {
+        serialHeartbeatRef.current = serialHeartbeat;
+    }, [serialHeartbeat]);
+
+    // Serial port heartbeat - monitors card reader connection
     useEffect(() => {
         if (!isStationActive) return;
 
         const checkSerialHeartbeat = async () => {
+            setSerialHeartbeat("checking");
+
             try {
-                const port = portRef.current;
                 if (!port) {
-                    console.warn("⚠️ Ingen port – söker efter tidigare...");
                     const ports = await (navigator as any).serial.getPorts();
                     if (ports.length > 0) {
-                        console.log("✅ Port hittad – ansluter igen");
                         await connectToPort(ports[0]);
                         setSerialHeartbeat("ok");
-                        serialHeartbeatRef.current = "ok";
                     } else {
-                        console.warn("❌ Ingen kortläsare hittad");
                         setSerialHeartbeat("error");
-                        serialHeartbeatRef.current = "error";
                     }
                     return;
                 }
 
-                if (!port.readable || !port.writable) {
-                    console.warn(
-                        "⚠️ Port läs/skriv saknas – försöker öppna igen"
-                    );
-                    setSerialHeartbeat("error");
-                    serialHeartbeatRef.current = "error";
-                    await disconnectSerial();
-                    const ports = await (navigator as any).serial.getPorts();
-                    if (ports.length > 0) await connectToPort(ports[0]);
-                } else {
-                    if (serialHeartbeatRef.current !== "ok") {
-                        console.log("💚 Kortläsare återansluten");
-                    }
+                if (port.readable && port.writable) {
                     setSerialHeartbeat("ok");
-                    serialHeartbeatRef.current = "ok";
+                } else {
+                    await disconnectSerial();
+                    setTimeout(async () => {
+                        try {
+                            const ports = await (
+                                navigator as any
+                            ).serial.getPorts();
+                            if (ports.length > 0) {
+                                await connectToPort(ports[0]);
+                                setSerialHeartbeat("ok");
+                            } else {
+                                setSerialHeartbeat("error");
+                            }
+                        } catch (err) {
+                            setSerialHeartbeat("error");
+                        }
+                    }, 1000);
                 }
             } catch (err) {
-                console.error("💥 Fel i checkSerialHeartbeat:", err);
                 setSerialHeartbeat("error");
-                serialHeartbeatRef.current = "error";
             }
         };
 
         checkSerialHeartbeat();
         const interval = setInterval(checkSerialHeartbeat, 5000);
         return () => clearInterval(interval);
-    }, [isStationActive]);
+    }, [isStationActive, port]);
 
-    /** ===== Anslut till port ===== */
-    const connectToPort = async (selectedPort: SerialPort) => {
-        console.log("🔌 connectToPort() anropad:", selectedPort);
-        try {
-            await selectedPort.open({ baudRate: 9600 });
-            console.log("✅ Port öppnad (9600 baud)");
-            portRef.current = selectedPort;
-            setSerialHeartbeat("ok");
-            serialHeartbeatRef.current = "ok";
-
-            // En del drivrutiner stödjer ondisconnect direkt på portobjektet
-            (selectedPort as any).ondisconnect = async () => {
-                console.warn("⚠️ Porten kopplades bort (ondisconnect)");
-                await disconnectSerial();
-            };
-
-            // Starta läsningen
-            startSerialReading(selectedPort).catch((err) =>
-                console.error("💥 startSerialReading() toppnivåfel:", err)
-            );
-        } catch (err) {
-            console.error("❌ Kunde inte öppna port:", err);
-            setSerialHeartbeat("error");
-            serialHeartbeatRef.current = "error";
-        }
-    };
-
-    /** ===== Koppla från port ===== */
-    const disconnectSerial = async () => {
-        console.log("🔌 Stänger port...");
-        try {
-            if (readerRef.current) {
-                await readerRef.current.cancel();
-                readerRef.current = null;
-            }
-            if (portRef.current) {
-                try {
-                    await portRef.current.close();
-                } catch (e) {
-                    // vissa implementationer kastar redan-stängd fel
-                }
-                console.log("✅ Port stängd");
-                portRef.current = null;
-            }
-        } catch (err) {
-            console.error("⚠️ Fel vid portstängning:", err);
-        }
-        setSerialHeartbeat("error");
-        serialHeartbeatRef.current = "error";
-    };
-
-    /** ===== Läs från port (kontinuerlig loop) ===== */
+    // denna funktion läser kontinuerligt från den seriella porten och hanterar kortläsarens data och uppdaterar state och UI baserat på det
     const startSerialReading = async (serialPort: SerialPort) => {
-        console.log("🟦 startSerialReading() initieras...");
         const DEBOUNCE_MS = 2000;
         let buffer = "";
         let lastUID = "";
@@ -332,44 +212,30 @@ export default function StationRegistrationPage() {
 
         try {
             const reader = serialPort.readable?.getReader();
-            if (!reader) {
-                console.warn("⚠️ Ingen readable stream tillgänglig.");
-                return;
-            }
+            if (!reader) return;
+
             readerRef.current = reader;
-            console.log("🟩 Börjar läsa data från porten...");
 
             while (true) {
-                if (isOfflineRef.current) {
-                    console.warn(
-                        "🚫 Backend offline – stoppar läsloop tillfälligt"
-                    );
-                    break;
-                }
+                if (isOfflineRef.current) break;
 
                 try {
                     const { value, done } = await reader.read();
-                    if (done) {
-                        console.warn("🔚 Läsning avslutad (done=true)");
-                        break;
-                    }
+                    if (done) break;
 
                     if (value) {
-                        const decoded = new TextDecoder().decode(value).trim();
-                        console.log("📥 Mottaget data:", decoded);
-                        buffer += decoded;
+                        buffer += new TextDecoder().decode(value).trim();
 
                         const uidMatch = buffer.match(/([0-9A-Fa-f]{8,14})/);
+
                         if (uidMatch) {
                             const cleanUID = uidMatch[1].toUpperCase();
-                            console.log("💳 UID hittat:", cleanUID);
-
                             const now = Date.now();
+
                             if (
                                 cleanUID === lastUID &&
                                 now - lastScanTime < DEBOUNCE_MS
                             ) {
-                                console.log("⏱️ Dubblett UID – ignoreras");
                                 buffer = "";
                                 continue;
                             }
@@ -381,49 +247,64 @@ export default function StationRegistrationPage() {
                                 !isOfflineRef.current &&
                                 serialHeartbeatRef.current === "ok"
                             ) {
-                                console.log(
-                                    "📡 Skickar UID till backend:",
-                                    cleanUID
-                                );
-                                // Kör asynkront – blockera inte läsloopen
-                                submitAttendance(cleanUID).catch((err) =>
-                                    console.error(
-                                        "❌ submitAttendance fel:",
-                                        err
-                                    )
-                                );
-                            } else {
-                                console.warn(
-                                    "⚠️ Offline eller portfel – UID ej skickad"
-                                );
+                                await submitAttendance(cleanUID);
                             }
 
                             buffer = "";
                         }
 
                         if (buffer.length > 100) {
-                            console.warn("🧹 Buffern för lång – rensar");
                             buffer = "";
                         }
                     }
-                } catch (readError: any) {
-                    console.error("💥 Fel i reader.read():", readError);
-                    // “device lost”/kabelfel → bryt loopen; heartbeat kommer försöka återansluta
+                } catch (readError) {
                     break;
                 }
             }
         } catch (err) {
-            console.error("💥 startSerialReading() fel:", err);
+            // Silent error handling
         } finally {
-            console.log("🔚 Avslutar startSerialReading()");
             readerRef.current = null;
         }
     };
 
-    /** ===== Registrera station ===== */
+    // Anslut till en vald seriell port
+    const connectToPort = async (selectedPort: SerialPort) => {
+        try {
+            await selectedPort.open({ baudRate: 9600 });
+            setPort(selectedPort);
+            setSerialHeartbeat("ok");
+            startSerialReading(selectedPort);
+        } catch (err) {
+            setSerialHeartbeat("error");
+        }
+    };
+
+    const disconnectSerial = async () => {
+        try {
+            if (readerRef.current) {
+                await readerRef.current.cancel();
+                readerRef.current = null;
+            }
+            if (port) {
+                await port.close();
+                setPort(null);
+            }
+        } catch (err) {
+            // Silent error handling
+        }
+        setSerialHeartbeat("error");
+    };
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            disconnectSerial();
+        };
+    }, []);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        console.log("🟦 handleSubmit() startar...");
 
         if (!stationId.trim() || !secret.trim()) {
             setMessage("Både Station ID och Secret Key krävs");
@@ -431,26 +312,18 @@ export default function StationRegistrationPage() {
             return;
         }
 
-        let selectedPort: SerialPort | undefined;
-        try {
-            console.log("📡 Begär portåtkomst...");
-            selectedPort = await (navigator as any).serial.requestPort();
-            console.log("✅ Port vald:", selectedPort);
-        } catch (err) {
-            console.error("❌ Användaren avbröt portval:", err);
-            return;
-        }
-
         setIsLoading(true);
         setMessage("Registrerar station...");
 
         try {
-            console.log("📨 Skickar registrering till backend...");
+            setMessage("Registrerar station...");
             const response = await fetch(
                 `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/station/register`,
                 {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
                     body: JSON.stringify({
                         stationId: stationId.trim(),
                         secret: secret.trim(),
@@ -458,13 +331,10 @@ export default function StationRegistrationPage() {
                 }
             );
 
-            console.log("📥 Backend-svar status:", response.status);
-            const data = await response.json().catch(() => ({}));
-            console.log("📦 Backend-svar data:", data);
+            const data = await response.json();
 
             if (response.ok && data.success) {
                 if (data.token) {
-                    console.log("💾 Sparar token i localStorage");
                     localStorage.setItem("stationToken", data.token);
                 }
 
@@ -472,80 +342,50 @@ export default function StationRegistrationPage() {
                 setIsStationActive(true);
                 setMessage("");
                 setIsSuccess(true);
-
-                if (selectedPort) {
-                    console.log("🔌 Ansluter vald port...");
-                    await connectToPort(selectedPort);
-                }
-
-                // Kör initial heartbeat direkt
-                try {
-                    console.log("💓 Kör initial heartbeat direkt...");
-                    const res = await fetch(
-                        `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/station/heartbeat`,
-                        {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                Authorization: `Bearer ${data.token}`,
-                            },
-                        }
-                    );
-                    if (res.ok) {
-                        console.log("💚 Första heartbeat OK – station online");
-                        setIsOffline(false);
-                        isOfflineRef.current = false;
-                    } else {
-                        console.warn(
-                            "💛 Första heartbeat misslyckades:",
-                            res.status
-                        );
-                    }
-                } catch (hbErr) {
-                    console.error("❤️‍🔥 Heartbeat fel:", hbErr);
-                }
             } else {
-                console.error("❌ Fel vid registrering:", data?.message);
-                setMessage(data?.message || "Fel vid registrering av station");
+                setMessage(data.message || "Fel vid registrering av station");
                 setIsSuccess(false);
             }
         } catch (error) {
-            console.error("🔥 Nätverksfel vid registrering:", error);
             setMessage("Nätverksfel vid registrering av station");
             setIsSuccess(false);
         } finally {
             setIsLoading(false);
-            console.log("🟩 handleSubmit() klar");
         }
     };
 
-    /** ===== Närvaro (UID) ===== */
-    const submitAttendance = async (uid: string) => {
-        console.log("📤 submitAttendance() STARTAR med UID:", uid);
+    const resetForm = () => {
+        disconnectSerial();
+        setStationId("");
+        setSecret("");
+        setMessage("");
+        setIsSuccess(false);
+        setRegistrationResult(null);
+        setIsStationActive(false);
+        localStorage.removeItem("stationToken");
+    };
 
+    const submitAttendance = async (uid: string) => {
         if (!uid?.trim()) {
-            console.warn("⚠️ UID saknas");
             setAttendanceMessage("UID krävs");
             return;
         }
-        if (isOfflineRef.current) {
-            console.warn("🚫 Station offline, avbryter attendance");
+
+        if (isOffline) {
             setAttendanceMessage(
                 "Station offline — kan inte registrera närvaro"
             );
             return;
         }
-        if (serialHeartbeatRef.current === "error") {
-            console.warn("🚫 Kortläsare frånkopplad");
+
+        if (serialHeartbeat === "error") {
             setAttendanceMessage(
                 "Kortläsare frånkopplad — kan inte registrera närvaro"
             );
             return;
         }
-        if (isProcessingRef.current) {
-            console.log("⏳ Pågående inläsning – avvaktar");
-            return;
-        }
+
+        if (isProcessingRef.current) return;
 
         isProcessingRef.current = true;
         setAttendanceLoading(true);
@@ -554,23 +394,21 @@ export default function StationRegistrationPage() {
         try {
             const token = localStorage.getItem("stationToken");
             if (!token) {
-                console.error("❌ Ingen token hittad – station ej registrerad");
                 setAttendanceMessage("Station inte inloggad - registrera igen");
                 return;
             }
 
-            const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/attendance/attendance-uid`;
-            console.log("📡 POST till:", url);
-            const response = await fetch(url, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({ uid: uid.trim() }),
-            });
-
-            console.log("📥 Attendance-svar status:", response.status);
+            const response = await fetch(
+                `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/attendance/attendance-uid`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ uid: uid.trim() }),
+                }
+            );
 
             if (response.status === 401) {
                 localStorage.removeItem("stationToken");
@@ -579,8 +417,7 @@ export default function StationRegistrationPage() {
                 return;
             }
 
-            const data = await response.json().catch(() => ({}));
-            console.log("📦 Attendance JSON:", data);
+            const data = await response.json();
 
             if (response.ok && data.success) {
                 setAttendanceMessage(`✅ ${data.message}`);
@@ -590,7 +427,7 @@ export default function StationRegistrationPage() {
 
                 setLastSuccess({
                     uid: uid.trim(),
-                    visitorName: data.attendance?.visitorName || "Unknown",
+                    visitorName: data.attendance.visitorName || "Unknown",
                     direction,
                 });
                 setAttendanceData({
@@ -600,31 +437,31 @@ export default function StationRegistrationPage() {
                     type: "personal",
                 });
 
-                setTimeout(() => setLastSuccess(null), 3000);
-                setTimeout(() => setAttendanceMessage(""), 3000);
+                setTimeout(() => {
+                    setLastSuccess(null);
+                }, 3000);
+
+                setTimeout(() => {
+                    setAttendanceMessage("");
+                }, 3000);
             } else {
-                if (
-                    data?.message &&
-                    String(data.message).includes("Ny besökare")
-                ) {
+                if (data.message && data.message.includes("Ny besökare")) {
                     setNewPersonUID(uid.trim());
                     setShowNewPersonModal(true);
                     setAttendanceMessage("");
                 } else {
                     setAttendanceMessage(
-                        data?.message || "Fel vid närvaroregistrering"
+                        data.message || "Fel vid närvaroregistrering"
                     );
                 }
             }
         } catch (error) {
-            console.error("🔥 Nätverksfel vid närvaroregistrering:", error);
             setAttendanceMessage("Nätverksfel vid närvaroregistrering");
         } finally {
             setAttendanceLoading(false);
             setTimeout(() => {
                 isProcessingRef.current = false;
             }, 1000);
-            console.log("🟩 submitAttendance() klar");
         }
     };
 
@@ -633,7 +470,6 @@ export default function StationRegistrationPage() {
         await submitAttendance(attendanceData.uid);
     };
 
-    /** ===== Ny person (modal) ===== */
     const handleNewPersonSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -641,6 +477,7 @@ export default function StationRegistrationPage() {
             setAttendanceMessage("Namn krävs för ny person");
             return;
         }
+
         if (!newPersonData.phoneNumber.trim()) {
             setAttendanceMessage("Telefonnummer krävs för ny person");
             return;
@@ -680,7 +517,7 @@ export default function StationRegistrationPage() {
                 return;
             }
 
-            const data = await response.json().catch(() => ({}));
+            const data = await response.json();
 
             if (response.ok && data.success) {
                 setAttendanceMessage(`✅ ${data.message}`);
@@ -698,36 +535,21 @@ export default function StationRegistrationPage() {
                     type: "personal",
                 });
 
-                setTimeout(() => setAttendanceMessage(""), 3000);
+                setTimeout(() => {
+                    setAttendanceMessage("");
+                }, 3000);
             } else {
                 setAttendanceMessage(
-                    data?.message || "Fel vid registrering av ny person"
+                    data.message || "Fel vid registrering av ny person"
                 );
             }
         } catch (error) {
-            console.error(
-                "🔥 Nätverksfel vid registrering av ny person:",
-                error
-            );
             setAttendanceMessage("Nätverksfel vid registrering av ny person");
         } finally {
             setAttendanceLoading(false);
         }
     };
 
-    /** ===== Reset / Logga ut station ===== */
-    const resetForm = () => {
-        disconnectSerial();
-        setStationId("");
-        setSecret("");
-        setMessage("");
-        setIsSuccess(false);
-        setRegistrationResult(null);
-        setIsStationActive(false);
-        localStorage.removeItem("stationToken");
-    };
-
-    /** ======= UI ======= */
     return (
         <main className="flex-grow flex items-center justify-center min-h-screen bg-background-light dark:bg-background-dark font-display text-text-light dark:text-text-dark">
             <div className="w-full max-w-lg mx-auto p-4 sm:p-6 lg:p-8 text-center">
@@ -752,9 +574,9 @@ export default function StationRegistrationPage() {
                         </span>
                     </div>
                 )}
-
                 <div className="relative bg-white dark:bg-background-dark rounded-xl shadow-lg border border-subtle-light dark:border-subtle-dark/20 p-8 space-y-6">
                     {isInitializing ? (
+                        // Visa en loading spinner medan vi kontrollerar localStorage
                         <div className="flex flex-col items-center space-y-4">
                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
                             <p className="text-text-light/70 dark:text-text-dark/70">
@@ -765,11 +587,11 @@ export default function StationRegistrationPage() {
                         <>
                             <div
                                 className={`w-24 h-24 rounded-full mx-auto flex items-center justify-center ring-4
-${
-    lastSuccess.direction === "in"
-        ? "bg-green-100 ring-green-500/30 text-green-700"
-        : "bg-red-100 ring-red-500/30 text-red-700"
-}`}
+    ${
+        lastSuccess.direction === "in"
+            ? "bg-green-100 ring-green-500/30 text-green-700"
+            : "bg-red-100 ring-red-500/30 text-red-700"
+    }`}
                             >
                                 {lastSuccess.direction === "in" ? (
                                     <Check className="w-12 h-12" />
@@ -788,11 +610,11 @@ ${
 
                             <div
                                 className={`flex items-center justify-center gap-2 p-3 rounded-lg
-${
-    lastSuccess.direction === "in"
-        ? "bg-green-100 text-green-700"
-        : "bg-red-100 text-red-700"
-}`}
+    ${
+        lastSuccess.direction === "in"
+            ? "bg-green-100 text-green-700"
+            : "bg-red-100 text-red-700"
+    }`}
                             >
                                 <CheckCircle className="w-5 h-5" />
                                 <span className="text-sm font-medium">
@@ -819,7 +641,6 @@ ${
                                 To get started, please register your station by
                                 providing the Station ID and Secret Key below.
                             </p>
-
                             <form onSubmit={handleSubmit} className="space-y-4">
                                 <div className="relative">
                                     <input
@@ -855,18 +676,6 @@ ${
                                     Registrera Station
                                 </button>
                             </form>
-
-                            {message && (
-                                <div
-                                    className={`p-3 rounded-lg text-sm ${
-                                        isSuccess
-                                            ? "bg-green-500/10 text-green-500"
-                                            : "bg-red-500/10 text-red-500"
-                                    }`}
-                                >
-                                    {message}
-                                </div>
-                            )}
                         </>
                     ) : (
                         <>
@@ -888,7 +697,6 @@ ${
                                     {isSystemOffline ? "Offline" : "Online"}
                                 </span>
                             </div>
-
                             <span className="material-symbols-outlined text-7xl text-primary">
                                 <Nfc className="h-12 w-12 mx-auto mb-4" />
                             </span>
@@ -944,8 +752,19 @@ ${
                             </form>
                         </>
                     )}
-                </div>
 
+                    {message && !isStationActive && (
+                        <div
+                            className={`p-3 rounded-lg text-sm ${
+                                isSuccess
+                                    ? "bg-green-500/10 text-green-500"
+                                    : "bg-red-500/10 text-red-500"
+                            }`}
+                        >
+                            {message}
+                        </div>
+                    )}
+                </div>
                 {showNewPersonModal && (
                     <div className="fixed bg-background-light inset-0 flex items-center justify-center z-50 p-4 ">
                         <div className="bg-white dark:bg-background-dark rounded-xl shadow-lg border border-subtle-light dark:border-subtle-dark/20 p-8 space-y-6 max-w-md w-full">
@@ -982,7 +801,6 @@ ${
                                         }
                                         className="form-input w-full h-12 pl-12 pr-4 rounded-lg bg-background-light dark:bg-subtle-dark/20 border-subtle-light dark:border-subtle-dark focus:ring-primary focus:border-primary transition-colors"
                                         disabled={attendanceLoading}
-
                                         /* required */
                                     />
                                 </div>
