@@ -232,7 +232,7 @@ export default function StationRegistrationPage() {
                     const ports = await (navigator as any).serial.getPorts();
                     if (ports.length > 0) {
                         console.log("✅ Port hittad – ansluter igen");
-                        await connectToPort(ports[0]);
+                        await connectToPort(ports[4]);
                         setSerialHeartbeat("ok");
                         serialHeartbeatRef.current = "ok";
                     } else {
@@ -251,7 +251,7 @@ export default function StationRegistrationPage() {
                     serialHeartbeatRef.current = "error";
                     await disconnectSerial();
                     const ports = await (navigator as any).serial.getPorts();
-                    if (ports.length > 0) await connectToPort(ports[0]);
+                    if (ports.length > 0) await connectToPort(ports[4]);
                 } else {
                     if (serialHeartbeatRef.current !== "ok") {
                         console.log("💚 Kortläsare återansluten");
