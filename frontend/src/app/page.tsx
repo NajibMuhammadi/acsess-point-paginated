@@ -148,6 +148,7 @@ export default function StationRegistrationPage() {
                         await p.open({ baudRate: 9600 });
                         await p.close();
                         verifiedPorts.push(p);
+                        console.log("✅ Verifierad port hittad:", p);
                     } catch (err) {
                         console.warn("👻 Spök-port hittad och ignorerad:", err);
                     }
