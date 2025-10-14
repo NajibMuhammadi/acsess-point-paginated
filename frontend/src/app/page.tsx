@@ -125,57 +125,13 @@ export default function StationRegistrationPage() {
             try {
                 console.log("🔍 Letar efter tidigare godkända portar...");
                 const ports = await (navigator as any).serial.getPorts();
-                /* if (ports.length > 0) {
+                if (ports.length > 0) {
                     console.log(
                         "✅ Tidigare port hittad – ansluter automatiskt"
                     );
-                    await connectToPort(ports[4]);
+                    await connectToPort(ports[0]);
                 } else {
                     console.warn("⚠️ Ingen tidigare port hittad");
-                } */
-
-                if (ports.length === 0) {
-                    console.warn("⚠️ Ingen tidigare port hittad");
-                    return;
-                }
-
-                console.log("✅ Tillgängliga portar:", ports);
-
-                // Filtrera bort “spök-portar” genom att testa open/close
-                const verifiedPorts: SerialPort[] = [];
-                for (const p of ports) {
-                    try {
-                        await p.open({ baudRate: 9600 });
-                        await p.close();
-                        verifiedPorts.push(p);
-                        console.log("✅ Verifierad port hittad:", p);
-                    } catch (err) {
-                        console.warn("👻 Spök-port hittad och ignorerad:", err);
-                    }
-                }
-
-                if (verifiedPorts.length === 0) {
-                    console.warn("❌ Ingen verklig aktiv port hittad");
-                    return;
-                }
-
-                // Om du vill filtrera efter din kortläsare
-                const validPort = verifiedPorts.find((p: any) => {
-                    const info = p.getInfo?.();
-                    console.log("🔧 Port info:", info);
-                    return (
-                        info?.usbVendorId === 1659 &&
-                        info?.usbProductId === 8963
-                    );
-                });
-
-                if (validPort) {
-                    console.log("✅ Rätt port hittad – ansluter...");
-                    await connectToPort(validPort);
-                } else {
-                    console.warn(
-                        "⚠️ Ingen giltig kortläsare hittad bland portar"
-                    );
                 }
             } catch (err) {
                 console.error("💥 Fel vid automatisk återanslutning:", err);
@@ -184,25 +140,6 @@ export default function StationRegistrationPage() {
 
         reconnectSerial();
     }, [isStationActive]);
-
-    // ska raderas pushar upp för test den från dagens datum och tid. 2025-10-14 08:30
-    useEffect(() => {
-        async function listPorts() {
-            const ports = await (navigator as any).serial.getPorts();
-            console.log("🧩 Tillgängliga portar:", ports);
-
-            ports.forEach(async (p: any, i: number) => {
-                try {
-                    const info = p.getInfo?.();
-                    console.log(`Port [${i}] info:`, info);
-                } catch {
-                    console.log(`Port [${i}] har ingen info`);
-                }
-            });
-        }
-
-        listPorts();
-    }, []);
 
     /** ===== Lyssna på OS-nivåns connect/disconnect events (om stöd finns) ===== */
     useEffect(() => {
@@ -295,7 +232,7 @@ export default function StationRegistrationPage() {
                     const ports = await (navigator as any).serial.getPorts();
                     if (ports.length > 0) {
                         console.log("✅ Port hittad – ansluter igen");
-                        await connectToPort(ports[4]);
+                        await connectToPort(ports[0]);
                         setSerialHeartbeat("ok");
                         serialHeartbeatRef.current = "ok";
                     } else {
@@ -314,7 +251,7 @@ export default function StationRegistrationPage() {
                     serialHeartbeatRef.current = "error";
                     await disconnectSerial();
                     const ports = await (navigator as any).serial.getPorts();
-                    if (ports.length > 0) await connectToPort(ports[4]);
+                    if (ports.length > 0) await connectToPort(ports[0]);
                 } else {
                     if (serialHeartbeatRef.current !== "ok") {
                         console.log("💚 Kortläsare återansluten");
