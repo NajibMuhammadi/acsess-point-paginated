@@ -134,30 +134,47 @@ export default function StationRegistrationPage() {
                     console.warn("⚠️ Ingen tidigare port hittad");
                 } */
 
-                if (ports.length > 0) {
-                    console.log("✅ Tillgängliga portar:", ports);
-
-                    // Filtrera rätt port baserat på din kortläsare (ändra ID:n efter behov)
-                    const validPort = ports.find((p: any) => {
-                        const info = p.getInfo?.();
-                        console.log("🔧 Port info:", info);
-                        // Sätt dessa till din kortläsares ID-värden
-                        return (
-                            info?.usbVendorId === 1659 &&
-                            info?.usbProductId === 8963
-                        );
-                    });
-
-                    if (validPort) {
-                        console.log("✅ Rätt port hittad – ansluter...");
-                        await connectToPort(validPort);
-                    } else {
-                        console.warn(
-                            "⚠️ Ingen giltig kortläsare hittad bland portar"
-                        );
-                    }
-                } else {
+                if (ports.length === 0) {
                     console.warn("⚠️ Ingen tidigare port hittad");
+                    return;
+                }
+
+                console.log("✅ Tillgängliga portar:", ports);
+
+                // Filtrera bort “spök-portar” genom att testa open/close
+                const verifiedPorts: SerialPort[] = [];
+                for (const p of ports) {
+                    try {
+                        await p.open({ baudRate: 9600 });
+                        await p.close();
+                        verifiedPorts.push(p);
+                    } catch (err) {
+                        console.warn("👻 Spök-port hittad och ignorerad:", err);
+                    }
+                }
+
+                if (verifiedPorts.length === 0) {
+                    console.warn("❌ Ingen verklig aktiv port hittad");
+                    return;
+                }
+
+                // Om du vill filtrera efter din kortläsare
+                const validPort = verifiedPorts.find((p: any) => {
+                    const info = p.getInfo?.();
+                    console.log("🔧 Port info:", info);
+                    return (
+                        info?.usbVendorId === 1659 &&
+                        info?.usbProductId === 8963
+                    );
+                });
+
+                if (validPort) {
+                    console.log("✅ Rätt port hittad – ansluter...");
+                    await connectToPort(validPort);
+                } else {
+                    console.warn(
+                        "⚠️ Ingen giltig kortläsare hittad bland portar"
+                    );
                 }
             } catch (err) {
                 console.error("💥 Fel vid automatisk återanslutning:", err);
@@ -275,42 +292,13 @@ export default function StationRegistrationPage() {
                 if (!port) {
                     console.warn("⚠️ Ingen port – söker efter tidigare...");
                     const ports = await (navigator as any).serial.getPorts();
-                    /*  if (ports.length > 0) {
+                    if (ports.length > 0) {
                         console.log("✅ Port hittad – ansluter igen");
                         await connectToPort(ports[4]);
                         setSerialHeartbeat("ok");
                         serialHeartbeatRef.current = "ok";
                     } else {
                         console.warn("❌ Ingen kortläsare hittad");
-                        setSerialHeartbeat("error");
-                        serialHeartbeatRef.current = "error";
-                    } */
-
-                    if (ports.length > 0) {
-                        console.log("✅ Tillgängliga portar:", ports);
-
-                        const validPort = ports.find((p: any) => {
-                            const info = p.getInfo?.();
-                            console.log("🔧 Port info:", info);
-                            // Ändra till din kortläsare
-                            return (
-                                info?.usbVendorId === 1659 &&
-                                info?.usbProductId === 8963
-                            );
-                        });
-
-                        if (validPort) {
-                            console.log("✅ Rätt port hittad – ansluter igen");
-                            await connectToPort(validPort);
-                            setSerialHeartbeat("ok");
-                            serialHeartbeatRef.current = "ok";
-                        } else {
-                            console.warn("❌ Ingen giltig kortläsare hittad");
-                            setSerialHeartbeat("error");
-                            serialHeartbeatRef.current = "error";
-                        }
-                    } else {
-                        console.warn("❌ Ingen port hittad");
                         setSerialHeartbeat("error");
                         serialHeartbeatRef.current = "error";
                     }
