@@ -23,10 +23,12 @@ export const BuildingsTable = ({
     buildings,
     stations,
     attendance,
+    isAdmin,
 }: {
     buildings: Building[];
     stations: Station[];
     attendance: Attendance[];
+    isAdmin: boolean;
 }) => {
     return (
         <section className="mt-8 bg-white rounded-xl p-6 shadow-sm dark:bg-primary/10">
@@ -40,7 +42,9 @@ export const BuildingsTable = ({
                             <th className="p-4">Building Name</th>
                             <th className="p-4">Address</th>
                             <th className="p-4">Occupancy</th>
-                            <th className="p-4">Active Stations</th>
+                            {isAdmin && (
+                                <th className="p-4">Active Stations</th>
+                            )}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-primary/10 dark:divide-primary/20">
@@ -74,9 +78,11 @@ export const BuildingsTable = ({
                                         <td className="p-4">
                                             {buildingOccupancy} / {capacity}
                                         </td>
-                                        <td className="p-4">
-                                            {buildingStations.length} / 20
-                                        </td>
+                                        {isAdmin && (
+                                            <td className="p-4">
+                                                {buildingStations.length} / 20
+                                            </td>
+                                        )}
                                     </tr>
                                 );
                             })

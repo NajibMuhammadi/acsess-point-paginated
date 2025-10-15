@@ -107,6 +107,7 @@ io.on("connection", (socket) => {
 async function startServer() {
     try {
         await connectDB();
+        startHeartbeatMonitor();
 
         server.listen(PORT, "0.0.0.0", () => {
             console.log(`🚀 Server running on port ${PORT}`);
@@ -117,4 +118,3 @@ async function startServer() {
     }
 }
 startServer();
-startHeartbeatMonitor();

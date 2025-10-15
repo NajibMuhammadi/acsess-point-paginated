@@ -93,10 +93,11 @@ export default function AdminLoginPage() {
 
                 // ✅ Dirigera baserat på roll
                 setTimeout(() => {
-                    if (data.user.role === "admin") {
-                        window.location.href = "/";
-                    } else if (data.user.role === "firestation") {
-                        window.location.href = "/station/dashboard";
+                    if (
+                        data.user.role === "admin" ||
+                        data.user.role === "firestation"
+                    ) {
+                        window.location.href = "/admin";
                     } else {
                         window.location.href = "/login";
                     }

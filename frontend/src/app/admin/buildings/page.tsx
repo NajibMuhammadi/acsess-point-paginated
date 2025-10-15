@@ -87,9 +87,11 @@ export default function BuildingsPage() {
                                 <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                                     Status
                                 </th>
-                                <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                                    Stations
-                                </th>
+                                {userData?.role === "admin" && (
+                                    <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                                        Stations
+                                    </th>
+                                )}
                                 <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                                     Actions
                                 </th>
@@ -125,9 +127,14 @@ export default function BuildingsPage() {
                                                     <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                                                         {building.buildingName}
                                                     </p>
-                                                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                                                        {building.buildingId}
-                                                    </p>
+                                                    {userData?.role ===
+                                                        "admin" && (
+                                                        <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                                                            {
+                                                                building.buildingId
+                                                            }
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </div>
                                         </td>
@@ -159,15 +166,19 @@ export default function BuildingsPage() {
                                                 </Badge>
                                             )}
                                         </td>
-                                        <td className="py-4 px-6">
-                                            <div className="flex items-center gap-2">
-                                                <Wifi className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                                                <span className="text-sm text-gray-700 dark:text-gray-300">
-                                                    {buildingStations.length}{" "}
-                                                    stations
-                                                </span>
-                                            </div>
-                                        </td>
+                                        {userData?.role === "admin" && (
+                                            <td className="py-4 px-6">
+                                                <div className="flex items-center gap-2">
+                                                    <Wifi className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                                    <span className="text-sm text-gray-700 dark:text-gray-300">
+                                                        {
+                                                            buildingStations.length
+                                                        }{" "}
+                                                        stations
+                                                    </span>
+                                                </div>
+                                            </td>
+                                        )}
                                         <td className="py-4 px-6">
                                             <Button
                                                 variant="outline"

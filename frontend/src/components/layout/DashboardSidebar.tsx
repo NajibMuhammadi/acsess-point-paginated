@@ -21,7 +21,7 @@ const navItems = [
         path: "/admin/stations",
         userRole: "admin",
     },
-    { title: "Attendance Logs", icon: FileText, path: "/logs" },
+    { title: "Attendance Logs", icon: FileText, path: "/admin/attendance" },
     { title: "Settings", icon: Settings, path: "/settings" },
 ];
 

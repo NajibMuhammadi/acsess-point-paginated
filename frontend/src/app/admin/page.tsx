@@ -8,25 +8,43 @@ import { BuildingsTable } from "@/components/dashboard/BuildingsTable";
 import { Building2, Users, Radio, Network } from "lucide-react";
 
 export default function AdminPage() {
-    const { buildings, stations, attendance, visitors } = useAdminData();
+    const { userData, buildings, stations, attendance, visitors } =
+        useAdminData();
 
     const totalBuildings = buildings.length;
     const activeStations = stations.filter((s) => s.buildingId);
     const totalStations = stations.length;
     const totalActiveUsers = attendance.filter((a) => !a.checkOutTime).length;
 
-    const weeklyData = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(
-        (day) => ({
-            day,
-            checkIns: attendance.filter(
-                (a) =>
-                    new Date(a.checkInTime || a.timestamp).toLocaleDateString(
-                        "en-US",
-                        { weekday: "short" }
-                    ) === day
-            ).length,
-        })
-    );
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+    // Hämta nuvarande datum
+    const now = new Date();
+
+    // Beräkna start på veckan (måndag)
+    const startOfWeek = new Date(now);
+    // 6 dagar tillbaks om idag är söndag
+    startOfWeek.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+    // Sätta timmar, minuter, sekunder och millisekunder till 0
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    // Gruppér check-ins per dag i veckan
+    const weeklyData = days.map((day, index) => {
+        // Hitta dagens datum
+        const dayStart = new Date(startOfWeek);
+        // Sätt datum till dagens datum plus index
+        dayStart.setDate(startOfWeek.getDate() + index);
+
+        const dayEnd = new Date(dayStart);
+        dayEnd.setDate(dayStart.getDate() + 1);
+
+        const checkIns = attendance.filter((a) => {
+            const checkInDate = new Date(a.checkInTime || a.timestamp);
+            return checkInDate >= dayStart && checkInDate < dayEnd;
+        }).length;
+
+        return { day, checkIns };
+    });
 
     const recentActivity = attendance
         .filter((a) => Boolean(a.visitorId))
@@ -103,6 +121,7 @@ export default function AdminPage() {
                 buildings={buildings}
                 stations={stations}
                 attendance={attendance}
+                isAdmin={userData?.role === "admin"}
             />
         </div>
     );
