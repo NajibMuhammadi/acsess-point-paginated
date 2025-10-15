@@ -98,41 +98,41 @@ export default function StationRegistrationPage() {
     }, []); */
 
     useEffect(() => {
-        const socket = io("http://localhost:4000", {
-            transports: ["websocket"],
-        });
+        const ws = new WebSocket("ws://localhost:4000");
 
-        socket.on("connect", () => {
-            console.log("🔌 Socket.IO ansluten:", socket.id);
-        });
-
-        socket.on("tcpData", (data: string) => {
-            if (!data.trim()) return;
-            console.log("📡 TCP-data mottagen:", data);
-            const uid = data.trim();
-            if (uid && !isProcessingRef.current) {
-                submitAttendance(uid);
-            }
-        });
-        socket.on("cardReaderConnected", (data: { isOnline: boolean }) => {
-            console.log(
-                "🛰️ Kortläsarstatus:",
-                data.isOnline ? "Online" : "Offline"
-            );
-            setIsCardReaderOffline(!data.isOnline);
-        });
-
-        socket.on("disconnect", () => {
-            console.log("❌ Socket.IO frånkopplad");
-        });
-
-        socket.on("error", (error: any) => {
-            console.error("⚠️ Socket.IO fel:", error);
-        });
-
-        return () => {
-            socket.disconnect();
+        ws.onopen = () => {
+            console.log("✅ WebSocket ansluten");
         };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.type === "cardReaderConnected") {
+                console.log(
+                    "🛰️ Kortläsarstatus:",
+                    data.isOnline ? "Online" : "Offline"
+                );
+                setIsCardReaderOffline(!data.isOnline);
+            }
+
+            if (data.type === "tcpData") {
+                const uid = data.uid?.trim();
+                if (uid && !isProcessingRef.current) {
+                    console.log("📡 TCP-data mottagen:", uid);
+                    submitAttendance(uid);
+                }
+            }
+        };
+
+        ws.onclose = () => {
+            console.log("❌ WebSocket frånkopplad");
+        };
+
+        ws.onerror = (err) => {
+            console.error("⚠️ WebSocket-fel:", err);
+        };
+
+        return () => ws.close();
     }, []);
 
     /** ===== Backend heartbeat ===== */
