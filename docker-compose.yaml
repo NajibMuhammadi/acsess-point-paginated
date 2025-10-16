@@ -13,9 +13,9 @@ services:
         labels:
             - "traefik.enable=true"
             - "traefik.http.routers.frontend.rule=Host(`checkpoint.app.serima.se`)"
-            - "traefik.http.routers.frontend.entrypoints=websecure"
-            - "traefik.http.routers.frontend.tls.certresolver=myresolver"
             - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+            - "traefik.http.routers.frontend.entrypoints=websecure"
+            - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
 
     backend:
         build: ./backend
@@ -28,9 +28,13 @@ services:
         labels:
             - "traefik.enable=true"
             - "traefik.http.routers.backend.rule=Host(`checkpoint.api.serima.se`)"
-            - "traefik.http.routers.backend.entrypoints=websecure"
-            - "traefik.http.routers.backend.tls.certresolver=myresolver"
             - "traefik.http.services.backend.loadbalancer.server.port=5000"
-            - "traefik.http.middlewares.websocket-headers.headers.customrequestheaders.Upgrade=websocket"
-            - "traefik.http.middlewares.websocket-headers.headers.customrequestheaders.Connection=Upgrade"
-            - "traefik.http.routers.backend.middlewares=websocket-headers"
+            - "traefik.http.routers.backend.entrypoints=websecure"
+            - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+
+            # 🧩 CORS och headers
+            - "traefik.http.middlewares.cors-header.headers.accesscontrolalloworiginlist=https://checkpoint.app.serima.se"
+            - "traefik.http.middlewares.cors-header.headers.accesscontrolallowmethods=GET,POST,PUT,DELETE,OPTIONS"
+            - "traefik.http.middlewares.cors-header.headers.accesscontrolallowheaders=Content-Type,Authorization"
+            - "traefik.http.middlewares.cors-header.headers.accesscontrolallowcredentials=true"
+            - "traefik.http.routers.backend.middlewares=cors-header@docker"

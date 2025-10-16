@@ -20,33 +20,40 @@ const server = http.createServer(app);
 
 export const io = new Server(server, {
     cors: {
-        origin: [
-            "https://checkpoint.app.serima.se",
-            "http://localhost:3000",
-            "http://172.20.20.47:3000",
-            "http://127.0.0.1:3000",
-        ],
+        origin: ["https://checkpoint.app.serima.se"],
         credentials: true,
         methods: ["GET", "POST", "PUT", "DELETE"],
-        allowedHeaders: ["Content-Type", "Authorization"],
     },
 });
 
+// 3️⃣ Global CORS – Express
 app.use(
     cors({
-        origin: [
-            "https://checkpoint.app.serima.se",
-            "http://localhost:3000",
-            "http://172.20.20.47:3000",
-            "http://127.0.0.1:3000",
-        ],
+        origin: ["https://checkpoint.app.serima.se"],
         credentials: true,
-        methods: ["GET", "POST", "PUT", "DELETE"],
-        allowedHeaders: ["Content-Type", "Authorization"],
     })
 );
 
-app.options(/.*/, cors()); // Hantera preflight requests
+// 4️⃣ Manuella headers för preflight
+app.use((req, res, next) => {
+    res.header(
+        "Access-Control-Allow-Origin",
+        "https://checkpoint.app.serima.se"
+    );
+    res.header(
+        "Access-Control-Allow-Methods",
+        "GET, POST, PUT, DELETE, OPTIONS"
+    );
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.header("Access-Control-Allow-Credentials", "true");
+
+    if (req.method === "OPTIONS") {
+        return res.sendStatus(204);
+    }
+
+    next();
+});
+
 app.use(express.json());
 
 app.use("/api/admin", adminRouter);
