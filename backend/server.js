@@ -28,6 +28,7 @@ export const io = new Server(server, {
         ],
         credentials: true,
         methods: ["GET", "POST", "PUT", "DELETE"],
+        allowedHeaders: ["Content-Type", "Authorization"],
     },
 });
 
@@ -40,8 +41,12 @@ app.use(
             "http://127.0.0.1:3000",
         ],
         credentials: true,
+        methods: ["GET", "POST", "PUT", "DELETE"],
+        allowedHeaders: ["Content-Type", "Authorization"],
     })
 );
+
+app.options("*", cors({})); // Hantera preflight requests
 app.use(express.json());
 
 app.use("/api/admin", adminRouter);
