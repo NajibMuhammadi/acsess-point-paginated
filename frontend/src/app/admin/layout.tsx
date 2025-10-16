@@ -89,7 +89,7 @@ export default function AdminLayout({
                 console.error("Error fetching data:", err);
             }
 
-            const s = clientIO(process.env.NEXT_PUBLIC_API_BASE_URL!, {
+            const s = clientIO("https://checkpoint.api.serima.se", {
                 transports: ["websocket"],
                 auth: { token },
             });
