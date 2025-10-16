@@ -2,6 +2,8 @@ import crypto from "crypto";
 import { getCompaniesCollection } from "../config/db.js";
 import { io } from "../server.js";
 
+let visitorId;
+let currentVisitor;
 export async function attendance(req, res) {
     // Läs data från frontend
     const { uid, visitorName, phoneNumber, type } = req.body;
@@ -67,6 +69,7 @@ export async function attendance(req, res) {
             // Realtidsuppdatering till alla admins i företagsrummet
             io.to(company._id).emit("visitorCreated", newVisitor);
             visitorId = newVisitor.visitorId;
+            currentVisitor = newVisitor;
         } else {
             // Uppdatera lastSeen på befintlig visitor
             await companiesCol.updateOne(
@@ -74,6 +77,7 @@ export async function attendance(req, res) {
                 { $set: { "visitors.$.lastSeen": now } }
             );
             visitorId = existingVisitor.visitorId;
+            currentVisitor = existingVisitor;
         }
         // Kolla om det finns en öppen attendance för denna uid (checkOutTime saknas)
         const openAttendance = company.attendance?.find(
@@ -102,7 +106,7 @@ export async function attendance(req, res) {
                 attendanceId: crypto.randomUUID(),
                 uid: uid.trim(),
                 visitorId,
-                visitorName: existingVisitor?.visitorName,
+                visitorName: currentVisitor.visitorName,
                 stationId: req.station.stationId,
                 buildingId: req.station.buildingId,
                 checkInTime: now,
