@@ -72,6 +72,12 @@ export default function AdminPage() {
                 timeStyle: "short",
             });
 
+            const visitType =
+                visitor?.type === "personal"
+                    ? "Personal"
+                    : visitor?.type === "business"
+                    ? "Business"
+                    : "Okänd typ";
             return {
                 attendanceId: a.attendanceId,
                 time: displayTime,
@@ -80,6 +86,7 @@ export default function AdminPage() {
                 uid: a.uid,
                 station: a.stationId || "Okänd station",
                 type,
+                visitType,
             };
         });
 

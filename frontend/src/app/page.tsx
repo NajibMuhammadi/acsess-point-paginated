@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 import {
+    Building2,
     Check,
     CheckCircle,
     IdCard,
@@ -11,6 +12,13 @@ import {
     User,
     UserPlus,
 } from "lucide-react";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 
 /** ======= Typer ======= */
 interface RegistrationResult {
@@ -43,7 +51,7 @@ export default function StationRegistrationPage() {
         uid: "",
         visitorName: "",
         phoneNumber: "",
-        type: "personal",
+        type: "",
     });
     const [attendanceLoading, setAttendanceLoading] = useState(false);
     const [attendanceMessage, setAttendanceMessage] = useState("");
@@ -52,7 +60,7 @@ export default function StationRegistrationPage() {
     const [newPersonData, setNewPersonData] = useState({
         visitorName: "",
         phoneNumber: "",
-        type: "personal",
+        type: "",
     });
     const [lastSuccess, setLastSuccess] = useState<{
         uid: string;
@@ -367,6 +375,10 @@ export default function StationRegistrationPage() {
         }
         if (!newPersonData.phoneNumber.trim()) {
             setAttendanceMessage("Telefonnummer krävs för ny person");
+            return;
+        }
+        if (!newPersonData.type) {
+            setAttendanceMessage("Typ av besök krävs för ny person");
             return;
         }
 
@@ -732,6 +744,52 @@ ${
                                         disabled={attendanceLoading}
                                         /* required */
                                     />
+                                </div>
+                                <div className="space-y-2">
+                                    <Select
+                                        value={newPersonData.type || ""}
+                                        onValueChange={(value) =>
+                                            setNewPersonData({
+                                                ...newPersonData,
+                                                type: value,
+                                            })
+                                        }
+                                        disabled={attendanceLoading}
+                                    >
+                                        <SelectTrigger
+                                            className="
+                        w-full h-12 rounded-xl px-4
+                        bg-background dark:bg-[#1E1E1E]/80
+                        border border-gray-200 dark:border-gray-700
+                        text-gray-900 dark:text-gray-100
+                        focus:ring-2 focus:ring-primary focus:border-primary
+                        transition-all duration-200
+                        hover:border-primary/60
+                    "
+                                        >
+                                            <SelectValue placeholder="Visitor Type" />
+                                        </SelectTrigger>
+
+                                        <SelectContent
+                                            className="
+                        dark:bg-[#1E1E1E] dark:border-gray-700
+                        bg-white border border-gray-200 rounded-lg shadow-md
+                    "
+                                        >
+                                            <SelectItem
+                                                value="personal"
+                                                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                                            >
+                                                🧑 Personal Visit
+                                            </SelectItem>
+                                            <SelectItem
+                                                value="business"
+                                                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                                            >
+                                                🏢 Business Visit
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
 
                                 <div className="flex gap-3">

@@ -9,6 +9,7 @@ interface RecentActivityProps {
     uid: string;
     station: string;
     type: "in" | "out";
+    visitType: string;
 }
 
 export const RecentActivity = ({
@@ -63,7 +64,8 @@ export const RecentActivity = ({
                                     : "checked-out"}
                             </p>
                             <p className="text-sm text-gray-600 dark:text-gray-400">
-                                {activity.building} - {activity.time}
+                                {activity.building} - {activity.time} -
+                                {activity.visitType}
                             </p>
                         </div>
                     </div>
