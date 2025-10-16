@@ -46,7 +46,7 @@ app.use(
     })
 );
 
-app.options("*", cors({})); // Hantera preflight requests
+app.options(/.*/, cors()); // Hantera preflight requests
 app.use(express.json());
 
 app.use("/api/admin", adminRouter);

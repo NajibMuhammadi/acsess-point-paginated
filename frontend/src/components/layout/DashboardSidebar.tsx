@@ -59,11 +59,9 @@ export const DashboardSidebar = () => {
                         {!isCollapsed && (
                             <div className="overflow-hidden">
                                 <h2 className="font-bold text-lg text-gray-900 dark:text-white whitespace-nowrap">
-                                    AttendFlow
+                                    Serima Checkpoint
                                 </h2>
-                                <p className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                                    Building Management
-                                </p>
+                                <p className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap"></p>
                             </div>
                         )}
                     </div>
@@ -155,7 +153,7 @@ export const DashboardSidebar = () => {
                 <div className="hidden lg:block p-4 border-t border-gray-200 dark:border-slate-700/50">
                     {!isCollapsed && (
                         <p className="text-xs text-gray-600 dark:text-gray-400 text-center mb-3">
-                            © 2025 AttendFlow. All rights reserved.
+                            © 2025 Serima checkpoint. All rights reserved.
                         </p>
                     )}
                     {/* Desktop Collapse Button */}

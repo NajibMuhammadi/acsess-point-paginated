@@ -34,7 +34,7 @@ export const DashboardHeader = ({
             <div className="flex items-center justify-between h-16 px-6">
                 <div>
                     <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-                        Admin Dashboard – Attendance Overview
+                        Dashboard
                     </h1>
                 </div>
 
