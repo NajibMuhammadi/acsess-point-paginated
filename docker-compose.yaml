@@ -10,6 +10,12 @@ services:
             - NODE_ENV=production
         depends_on:
             - backend
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.frontend.rule=Host(`checkpoint.app.serima.se`)"
+            - "traefik.http.routers.frontend.entrypoints=websecure"
+            - "traefik.http.routers.frontend.tls.certresolver=myresolver"
+            - "traefik.http.services.frontend.loadbalancer.server.port=3000"
 
     backend:
         build: ./backend
@@ -20,5 +26,11 @@ services:
             - PORT=5000
             - NODE_ENV=production
         labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.backend.rule=Host(`checkpoint.api.serima.se`)"
+            - "traefik.http.routers.backend.entrypoints=websecure"
+            - "traefik.http.routers.backend.tls.certresolver=myresolver"
+            - "traefik.http.services.backend.loadbalancer.server.port=5000"
             - "traefik.http.middlewares.websocket-headers.headers.customrequestheaders.Upgrade=websocket"
             - "traefik.http.middlewares.websocket-headers.headers.customrequestheaders.Connection=Upgrade"
+            - "traefik.http.routers.backend.middlewares=websocket-headers"
