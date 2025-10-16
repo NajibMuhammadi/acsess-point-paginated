@@ -164,6 +164,12 @@ export default function AdminLayout({
                 );
             });
 
+            s.on("buildingDeleted", (data: { buildingId: string }) => {
+                console.log("🏢 Building deleted:", data.buildingId);
+                setBuildings((prev) =>
+                    prev.filter((b) => b.buildingId !== data.buildingId)
+                );
+            });
             setSocket(s);
             return () => s.disconnect();
         };

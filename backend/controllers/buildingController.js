@@ -163,3 +163,74 @@ export async function getBuildingDetails(req, res) {
         });
     }
 }
+export async function deleteBuilding(req, res) {
+    try {
+        const { buildingId } = req.params;
+        const userCompanyId = req.user.companyId;
+        const companiesCol = getCompaniesCollection();
+
+        // Hämta företaget
+        const company = await companiesCol.findOne({ _id: userCompanyId });
+        if (!company) {
+            return res.status(404).json({
+                success: false,
+                message: "Företag hittades inte",
+            });
+        }
+
+        // Hitta byggnaden
+        const building = (company.buildings || []).find(
+            (b) => b.buildingId === buildingId
+        );
+        if (!building) {
+            return res.status(404).json({
+                success: false,
+                message: "Byggnad hittades inte",
+            });
+        }
+
+        // Kolla om byggnaden har stationer kopplade till sig
+        const stations = (company.stations || []).filter(
+            (s) => s.buildingId === buildingId
+        );
+
+        if (stations.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Building has stations associated with it. Please remove the stations first.",
+            });
+        }
+
+        // Radera byggnaden
+        await companiesCol.updateOne(
+            { _id: userCompanyId },
+            {
+                $pull: { buildings: { buildingId } },
+                $set: { updatedAt: new Date() },
+            }
+        );
+
+        // Ta bort attendances kopplade till byggnaden
+        await companiesCol.updateOne(
+            { _id: userCompanyId },
+            {
+                $pull: { attendance: { buildingId } },
+                $set: { updatedAt: new Date() },
+            }
+        );
+
+        io.to(userCompanyId).emit("buildingDeleted", { buildingId });
+
+        return res.status(200).json({
+            success: true,
+            message: "Byggnaden har tagits bort.",
+        });
+    } catch (error) {
+        console.error("Error deleting building:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Ett fel inträffade vid borttagning av byggnad.",
+        });
+    }
+}

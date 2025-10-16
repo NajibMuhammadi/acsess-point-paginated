@@ -9,11 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Building2, Search, Plus, MapPin, Users, Wifi } from "lucide-react";
 import { AddBuildingModal } from "@/components/modals/AddBuildingModal";
 import { BuildingDetailsModal } from "@/components/modals/BuildingDetailsModal";
+import { DeleteBuildingModal } from "@/components/modals/DeleteBuildingModal";
 
 export default function BuildingsPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [selectedBuilding, setSelectedBuilding] = useState<any>(null);
     const { buildings, stations, attendance, userData, visitors } =
         useAdminData();
@@ -27,6 +29,16 @@ export default function BuildingsPage() {
     const handleViewDetails = (building: any) => {
         setSelectedBuilding(building);
         setIsDetailsModalOpen(true);
+    };
+
+    const handleDeleteBuilding = (building: any) => {
+        setSelectedBuilding(building);
+        setIsDeleteModalOpen(true);
+    };
+
+    const handleDeleteSuccess = () => {
+        console.log("Building deleted successfully");
+        // Refresh data or update state
     };
 
     const filteredBuildings = buildings.filter((building) =>
@@ -180,16 +192,34 @@ export default function BuildingsPage() {
                                             </td>
                                         )}
                                         <td className="py-4 px-6">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() =>
-                                                    handleViewDetails(building)
-                                                }
-                                                className="text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-800 dark:hover:bg-blue-900/20 dark:text-blue-400 rounded-lg"
-                                            >
-                                                View Details
-                                            </Button>
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        handleViewDetails(
+                                                            building
+                                                        )
+                                                    }
+                                                    className="text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-800 dark:hover:bg-blue-900/20 dark:text-blue-400 rounded-lg"
+                                                >
+                                                    View Details
+                                                </Button>
+                                                {userData?.role === "admin" && (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                            handleDeleteBuilding(
+                                                                building
+                                                            )
+                                                        }
+                                                        className="text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20 dark:text-red-400 rounded-lg"
+                                                    >
+                                                        Remove
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 );
@@ -219,6 +249,16 @@ export default function BuildingsPage() {
                     visitors={visitors}
                 />
             )}
+
+            <DeleteBuildingModal
+                isOpen={isDeleteModalOpen}
+                onClose={() => {
+                    setIsDeleteModalOpen(false);
+                    setSelectedBuilding(null);
+                }}
+                building={selectedBuilding}
+                onSuccess={handleDeleteSuccess}
+            />
         </div>
     );
 }
