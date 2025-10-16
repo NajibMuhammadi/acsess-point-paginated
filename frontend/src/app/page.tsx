@@ -63,7 +63,7 @@ export default function StationRegistrationPage() {
     /** ===== API heartbeat state ===== */
     /** ===== STATUSAR ===== */
     const [isStationOffline, setIsStationOffline] = useState(false); // 🆕 stationens status via heartbeat
-    const [isCardReaderOffline, setIsCardReaderOffline] = useState(false); // 🆕 kortläsarens status via TCP/socket
+    const [isCardReaderOffline, setIsCardReaderOffline] = useState(true); // 🆕 kortläsarens status via TCP/socket
 
     /** ===== Refs (för att undvika stale state i async-loops) ===== */
     const isProcessingRef = useRef(false);
@@ -84,18 +84,6 @@ export default function StationRegistrationPage() {
     useEffect(() => {
         isStationOfflineRef.current = isStationOffline; // 🧠 så att async-funktioner alltid har rätt värde
     }, [isStationOffline]);
-
-    /*     useEffect(() => {
-        const ws = new WebSocket("ws://station1.serima.se:3001");
-
-        ws.onopen = () => {
-            console.log("connected");
-        };
-
-        ws.onclose = () => {
-            console.log("disconnected");
-        };
-    }, []); */
 
     useEffect(() => {
         const ws = new WebSocket("ws://localhost:4000");
