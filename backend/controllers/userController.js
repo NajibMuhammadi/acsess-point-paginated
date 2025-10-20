@@ -279,3 +279,36 @@ export async function getProfile(req, res) {
         res.status(500).json({ success: false, message: "Server error" });
     }
 }
+
+export async function getAllVisitors(req, res) {
+    try {
+        const companiesCol = getCompaniesCollection();
+
+        // Hämta företaget baserat på adminens companyId (från JWT)
+        const company = await companiesCol.findOne({
+            _id: req.user.companyId,
+        });
+
+        if (!company) {
+            return res
+                .status(404)
+                .json({ success: false, message: "Företag hittades inte" });
+        }
+
+        // Hämta besökare från företagets `visitors`-array
+        const visitors = company.visitors || [];
+
+        return res.status(200).json({
+            success: true,
+            visitors,
+        });
+    } catch (err) {
+        console.error("❌ Error fetching visitors:", err);
+        return res
+            .status(500)
+            .json({
+                success: false,
+                message: "Serverfel vid hämtning av besökare",
+            });
+    }
+}

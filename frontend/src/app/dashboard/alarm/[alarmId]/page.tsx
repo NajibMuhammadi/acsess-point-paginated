@@ -54,7 +54,7 @@ export default function AlarmDetailsPage() {
             <div className="flex flex-col items-center justify-center h-[80vh] text-gray-400">
                 <p>Alarm not found.</p>
                 <Button
-                    onClick={() => router.push("/dashboard/larm")}
+                    onClick={() => router.push("/dashboard/alarm")}
                     className="mt-4 bg-blue-600 text-white hover:bg-blue-700"
                 >
                     Go Back
@@ -82,7 +82,7 @@ export default function AlarmDetailsPage() {
                     </p>
                 </div>
                 <Button
-                    onClick={() => router.push("/dashboard/larm")}
+                    onClick={() => router.push("/dashboard/alarm")}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
                 >
                     <span className="material-symbols-outlined">

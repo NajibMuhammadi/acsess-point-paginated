@@ -169,7 +169,7 @@ export default function AlarmCenterPage() {
                         key={alarm.alarmId}
                         className="flex flex-col gap-3 rounded-lg p-4 bg-white dark:bg-gray-800/50 shadow-sm hover:shadow-md transition-shadow duration-200 cursor-pointer"
                         onClick={() =>
-                            router.push(`/dashboard/larm/${alarm.alarmId}`)
+                            router.push(`/dashboard/alarm/${alarm.alarmId}`)
                         }
                     >
                         <div className="flex items-center gap-3">

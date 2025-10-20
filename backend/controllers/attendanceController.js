@@ -133,3 +133,33 @@ export async function attendance(req, res) {
         res.status(500).json({ success: false, message: "Serverfel" });
     }
 }
+
+export async function getAllAttendance(req, res) {
+    try {
+        const companiesCol = getCompaniesCollection();
+
+        // Hämta företag utifrån adminens token
+        const company = await companiesCol.findOne({
+            _id: req.user.companyId,
+        });
+
+        if (!company) {
+            return res
+                .status(404)
+                .json({ success: false, message: "Företag hittades inte" });
+        }
+
+        const attendance = company.attendance || [];
+
+        return res.status(200).json({
+            success: true,
+            attendance,
+        });
+    } catch (err) {
+        console.error("❌ Error fetching attendance:", err);
+        res.status(500).json({
+            success: false,
+            message: "Serverfel vid hämtning av attendance",
+        });
+    }
+}

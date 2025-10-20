@@ -4,6 +4,7 @@ import {
     changeUserRole,
     deleteUser,
     getAllUsers,
+    getAllVisitors,
     getProfile,
     loginUser,
     registerUser,
@@ -20,6 +21,8 @@ router.get("/users", authRole("admin"), getAllUsers);
 router.put("/approve-user", authRole("admin"), approveUser);
 router.delete("/delete-user/:userId", authRole("admin"), deleteUser);
 router.put("/change-role", authRole("admin"), changeUserRole);
+router.get("/all", authRole("admin"), getAllVisitors);
+
 router.get("/profile", authRole(), getProfile);
 
 export default router;
