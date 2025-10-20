@@ -1,5 +1,6 @@
 import { getCompaniesCollection } from "../config/db.js";
 import { io } from "../server.js";
+import crypto from "crypto";
 
 export async function handleAlarm(req, res) {
     try {
