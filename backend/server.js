@@ -11,6 +11,7 @@ import adminRouter from "./routes/adminRoutes.js";
 import buildingRouter from "./routes/buildingRoutes.js";
 import attendanceRouter from "./routes/attendanceRoutes.js";
 import { startHeartbeatMonitor } from "./controllers/stationController.js";
+import alarmRouter from "./routes/alarmRoutes.js";
 
 dotenv.config();
 const PORT = process.env.PORT || 5000;
@@ -20,7 +21,7 @@ const server = http.createServer(app);
 
 export const io = new Server(server, {
     cors: {
-        origin: ["https://checkpoint.app.serima.se"],
+        origin: ["https://checkpoint.app.serima.se", "http://localhost:3000"],
         credentials: true,
         methods: ["GET", "POST", "PUT", "DELETE"],
     },
@@ -29,7 +30,7 @@ export const io = new Server(server, {
 // 3️⃣ Global CORS – Express
 app.use(
     cors({
-        origin: ["https://checkpoint.app.serima.se"],
+        origin: ["https://checkpoint.app.serima.se", "http://localhost:3000"],
         credentials: true,
     })
 );
@@ -38,7 +39,8 @@ app.use(
 app.use((req, res, next) => {
     res.header(
         "Access-Control-Allow-Origin",
-        "https://checkpoint.app.serima.se"
+        "https://checkpoint.app.serima.se",
+        "http://localhost:3000"
     );
     res.header(
         "Access-Control-Allow-Methods",
@@ -60,6 +62,7 @@ app.use("/api/admin", adminRouter);
 app.use("/api/building", buildingRouter);
 app.use("/api/station", stationRouter);
 app.use("/api/attendance", attendanceRouter);
+app.use("/api/alarm", alarmRouter);
 
 // Håller koll på anslutna stationer
 export const stationConnections = new Map();
@@ -106,8 +109,16 @@ io.on("connection", (socket) => {
     // Admin-anslutning
     console.log("👤 Admin anslöt:", socket.id);
 
-    socket.on("joinCompany", (companyId) => {
-        socket.join(companyId);
+    socket.on("joinCompany", (data) => {
+        const companyId = data?.companyId || data; // hanterar både objekt & sträng
+        if (!companyId) {
+            console.warn(
+                `⚠️ joinCompany anrop utan companyId från ${socket.id}`
+            );
+            return;
+        }
+
+        socket.join(companyId.toString());
         console.log(`➡️ Admin gick med i room: ${companyId}`);
     });
 

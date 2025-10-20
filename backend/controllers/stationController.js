@@ -315,3 +315,94 @@ export function startHeartbeatMonitor() {
         }
     }, 15000);
 }
+
+export async function deleteStation(req, res) {
+    try {
+        const { stationId } = req.params;
+        const userCompanyId = req.user.companyId;
+
+        if (!stationId?.trim()) {
+            return res
+                .status(400)
+                .json({ success: false, message: "stationId krävs" });
+        }
+
+        const companiesCol = getCompaniesCollection();
+
+        // 🔍 Hämta företaget och stationen
+        const company = await companiesCol.findOne({
+            _id: userCompanyId,
+            "stations.stationId": stationId.trim(),
+        });
+
+        if (!company) {
+            return res.status(404).json({
+                success: false,
+                message: "Station hittades inte",
+            });
+        }
+
+        const station = company.stations.find(
+            (s) => s.stationId === stationId.trim()
+        );
+
+        if (!station) {
+            return res.status(404).json({
+                success: false,
+                message: "Station hittades inte i företaget",
+            });
+        }
+
+        // 🏢 Om stationen är kopplad till en byggnad – ta bort den kopplingen
+        if (station.buildingId) {
+            await companiesCol.updateOne(
+                {
+                    _id: userCompanyId,
+                    "buildings.buildingId": station.buildingId,
+                },
+                {
+                    $pull: { "buildings.$.stations": station.stationId },
+                }
+            );
+
+            console.log(
+                `🏢 Station ${stationId} kopplad till byggnad ${station.buildingId} har kopplats bort.`
+            );
+        }
+
+        // ❌ Ta bort stationen från företagets lista
+        const result = await companiesCol.updateOne(
+            { _id: userCompanyId },
+            {
+                $pull: { stations: { stationId: stationId.trim() } },
+                $set: { updatedAt: new Date() },
+            }
+        );
+
+        if (result.modifiedCount === 0) {
+            return res.status(500).json({
+                success: false,
+                message: "Kunde inte radera stationen",
+            });
+        }
+
+        // 🔥 Realtidsuppdatering
+        io.to(userCompanyId.toString()).emit("stationDeleted", {
+            stationId: stationId.trim(),
+            buildingId: station.buildingId || null,
+        });
+
+        console.log(
+            `🗑️ Station ${stationId} raderad från företag ${userCompanyId}`
+        );
+
+        return res.json({
+            success: true,
+            message: "Station raderad framgångsrikt",
+            stationId: stationId.trim(),
+        });
+    } catch (err) {
+        console.error("Error deleting station:", err);
+        return res.status(500).json({ success: false, message: "Serverfel" });
+    }
+}

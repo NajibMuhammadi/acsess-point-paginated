@@ -190,3 +190,92 @@ export async function loginUser(req, res) {
         });
     }
 }
+
+export async function getAllUsers(req, res) {
+    try {
+        const companiesCol = getCompaniesCollection();
+        const company = await companiesCol.findOne({ _id: req.user.companyId });
+        if (!company) return res.status(404).json({ success: false });
+
+        res.json({ success: true, users: company.users || [] });
+    } catch (err) {
+        console.error("❌ getAllUsers error:", err);
+        res.status(500).json({ success: false });
+    }
+}
+
+export async function approveUser(req, res) {
+    try {
+        const { userId } = req.body;
+        const companiesCol = getCompaniesCollection();
+        const result = await companiesCol.updateOne(
+            { _id: req.user.companyId, "users.userId": userId },
+            { $set: { "users.$.isApproved": true } }
+        );
+        res.json({ success: result.modifiedCount > 0 });
+    } catch (err) {
+        console.error("❌ approveUser error:", err);
+        res.status(500).json({ success: false });
+    }
+}
+
+export async function deleteUser(req, res) {
+    try {
+        const { userId } = req.params;
+        const companiesCol = getCompaniesCollection();
+        const result = await companiesCol.updateOne(
+            { _id: req.user.companyId },
+            { $pull: { users: { userId } } }
+        );
+        res.json({ success: result.modifiedCount > 0 });
+    } catch (err) {
+        console.error("❌ deleteUser error:", err);
+        res.status(500).json({ success: false });
+    }
+}
+
+export async function changeUserRole(req, res) {
+    try {
+        const { userId, role } = req.body;
+        const companiesCol = getCompaniesCollection();
+
+        const result = await companiesCol.updateOne(
+            { _id: req.user.companyId, "users.userId": userId },
+            { $set: { "users.$.role": role } }
+        );
+
+        res.json({ success: result.modifiedCount > 0 });
+    } catch (err) {
+        console.error("❌ changeUserRole error:", err);
+        res.status(500).json({ success: false });
+    }
+}
+export async function getProfile(req, res) {
+    try {
+        const { companyId, userId } = req.user;
+
+        const companiesCol = getCompaniesCollection();
+        const company = await companiesCol.findOne({
+            _id: companyId,
+            "users.userId": userId,
+        });
+
+        if (!company)
+            return res.status(404).json({
+                success: false,
+                message: "Company or user not found",
+            });
+
+        const user = company.users.find((u) => u.userId === userId);
+        if (!user)
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
+            });
+
+        return res.json({ success: true, user });
+    } catch (err) {
+        console.error("Error fetching profile:", err);
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+}
