@@ -97,6 +97,16 @@ export async function handleAlarm(req, res) {
                 { $push: { alarms: alarmLog } }
             );
 
+            io.emit("alarmTriggered", {
+                alarmId: alarmLog.alarmId,
+                buildingId,
+                buildingName: building?.buildingName || "Okänd byggnad",
+                alarmType: alarmCode,
+                message: fakeMessage,
+                totalPeople: 0,
+                timestamp: new Date().toISOString(),
+            });
+
             return res.status(200).json({
                 success: true,
                 message: "Inga aktiva personer i byggnaden (larm loggat)",
@@ -173,18 +183,18 @@ export async function acknowledgeAlarm(req, res) {
     try {
         const { alarmId } = req.body;
         if (!alarmId)
-            return res
-                .status(400)
-                .json({ success: false, message: "alarmId krävs" });
+            return res.status(400).json({
+                success: false,
+                message: "alarmId krävs",
+            });
 
         const companiesCol = getCompaniesCollection();
         const company = await companiesCol.findOne({ _id: req.user.companyId });
-
-        if (!company) {
-            return res
-                .status(404)
-                .json({ success: false, message: "Företag hittades inte" });
-        }
+        if (!company)
+            return res.status(404).json({
+                success: false,
+                message: "Företag hittades inte",
+            });
 
         const result = await companiesCol.updateOne(
             { _id: company._id, "alarms.alarmId": alarmId },
@@ -198,10 +208,18 @@ export async function acknowledgeAlarm(req, res) {
         );
 
         if (result.modifiedCount === 0) {
-            return res
-                .status(404)
-                .json({ success: false, message: "Larm hittades inte" });
+            return res.status(404).json({
+                success: false,
+                message: "Larm hittades inte",
+            });
         }
+
+        // 🔥 Skicka realtidsuppdatering till alla admins i samma företag
+        io.to(req.user.companyId.toString()).emit("alarmAcknowledged", {
+            alarmId,
+            acknowledgedBy: req.user.userId,
+            acknowledgedAt: new Date(),
+        });
 
         res.status(200).json({
             success: true,

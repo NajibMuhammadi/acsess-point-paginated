@@ -225,6 +225,49 @@ export default function AdminLayout({
                 ...prev,
             ]);
         });
+        s.on("alarmAcknowledged", (data) => {
+            console.log("🔔 Larm kvitterades i realtid:", data);
+
+            // Uppdatera lokala larmlistan
+            setAlarms((prev) =>
+                prev.map((a) =>
+                    a.alarmId === data.alarmId
+                        ? {
+                              ...a,
+                              acknowledged: true,
+                              acknowledgedAt: data.acknowledgedAt,
+                              acknowledgedBy: data.acknowledgedBy,
+                          }
+                        : a
+                )
+            );
+        });
+        s.on("buildingDeleted", (data: { buildingId: string }) => {
+            console.log("🏢 Building deleted (realtime):", data.buildingId);
+
+            setBuildings((prev) =>
+                prev.filter((b) => b.buildingId !== data.buildingId)
+            );
+
+            // Ta även bort alla stationer kopplade till byggnaden
+            setStations((prev) =>
+                prev.map((s) =>
+                    s.buildingId === data.buildingId
+                        ? { ...s, buildingId: null }
+                        : s
+                )
+            );
+        });
+        s.on(
+            "stationDeleted",
+            (data: { stationId: string; buildingId?: string }) => {
+                console.log("🗑️ Station deleted (realtime):", data.stationId);
+
+                setStations((prev) =>
+                    prev.filter((s) => s.stationId !== data.stationId)
+                );
+            }
+        );
         setSocket(s);
     }
 

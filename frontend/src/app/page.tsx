@@ -157,6 +157,13 @@ export default function StationRegistrationPage() {
                         console.log("💚 Station online igen!");
                     setIsStationOffline(false);
                     isStationOfflineRef.current = false;
+                } else if (res.status === 401) {
+                    console.warn("🚨 Token ogiltig — loggar ut stationen!");
+                    localStorage.removeItem("stationToken");
+                    setIsStationActive(false);
+                    setMessage(
+                        "Stationen har tagits bort eller tokenen har gått ut"
+                    );
                 } else {
                     console.warn("🚨 Station offline (felstatus):", res.status);
                     setIsStationOffline(true);
