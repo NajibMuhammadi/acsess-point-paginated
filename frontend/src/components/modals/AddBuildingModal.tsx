@@ -20,6 +20,7 @@ import {
     AlertCircle,
     Loader2,
 } from "lucide-react";
+import { apiRequest } from "@/utils/api";
 
 interface AddBuildingModalProps {
     isOpen: boolean;
@@ -70,21 +71,13 @@ export const AddBuildingModal = ({
         setMessage("");
 
         try {
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/building/create-building`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({ buildingName }),
-                }
+            const { ok, data } = await apiRequest(
+                "/api/building/create-building",
+                "POST",
+                { buildingName },
+                token
             );
-
-            const data = await response.json();
-
-            if (response.ok) {
+            if (ok && data.success) {
                 setIsSuccess(true);
                 setShowSuccess(true);
                 setMessage(
@@ -92,9 +85,7 @@ export const AddBuildingModal = ({
                 );
 
                 // Call success callback if provided
-                if (onSuccess) {
-                    onSuccess(data.building);
-                }
+                onSuccess?.(data.building);
 
                 // Auto-close after 2 seconds
                 setTimeout(() => {

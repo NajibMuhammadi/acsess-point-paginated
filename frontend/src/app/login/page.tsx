@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { apiRequest } from "@/utils/api";
 
 export default function AdminLoginPage() {
     const [formData, setFormData] = useState({
@@ -21,86 +22,34 @@ export default function AdminLoginPage() {
             ...prev,
             [e.target.name]: e.target.value,
         }));
-        setMessage(""); // Rensa meddelanden när användaren skriver
-    };
-
-    const validateForm = () => {
-        if (!formData.registrationKey.trim()) {
-            setMessage("Registreringsnyckel krävs");
-            setIsError(true);
-            return false;
-        }
-
-        if (!formData.email.trim()) {
-            setMessage("E-post krävs");
-            setIsError(true);
-            return false;
-        }
-
-        if (!formData.password) {
-            setMessage("Lösenord krävs");
-            setIsError(true);
-            return false;
-        }
-
-        // E-post validering
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(formData.email)) {
-            setMessage("Ogiltig e-postadress");
-            setIsError(true);
-            return false;
-        }
-
-        return true;
+        setMessage("");
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        if (!validateForm()) {
-            return;
-        }
-
         setLoading(true);
         setMessage("");
 
         try {
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/admin/loginadmin`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify(formData),
-                }
+            const { ok, data } = await apiRequest(
+                "/api/admin/login",
+                "POST",
+                formData
             );
 
-            const data = await response.json();
-
-            if (data.success) {
+            if (ok && data.success) {
                 // ✅ Spara token
                 localStorage.setItem("userToken", data.token);
 
                 setMessage(`${data.message} Omdirigerar...`);
                 setIsError(false);
 
-                setFormData({
-                    registrationKey: "",
-                    email: "",
-                    password: "",
-                });
-
-                // ✅ Dirigera baserat på roll
                 setTimeout(() => {
-                    if (
-                        data.user.role === "admin" ||
-                        data.user.role === "firestation"
-                    ) {
-                        window.location.href = "/admin";
-                    } else {
-                        window.location.href = "/login";
-                    }
+                    const role = data.user?.role;
+                    window.location.href =
+                        role === "admin" || role === "firestation"
+                            ? "/dashboard"
+                            : "/login";
                 }, 1000);
             } else {
                 setMessage(data.message || "Ett fel uppstod vid inloggning");

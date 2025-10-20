@@ -476,7 +476,7 @@ export default function StationRegistrationPage() {
                             isCardReaderOffline ? "bg-red-500" : "bg-green-500"
                         }`}
                     ></span>
-                    Kortläsare: {isCardReaderOffline ? "Offline" : "Online"}
+                    Card reader: {isCardReaderOffline ? "Offline" : "Online"}
                 </span>
                 <div className="relative bg-white dark:bg-background-dark rounded-xl shadow-lg border border-subtle-light dark:border-subtle-dark/20 p-8 space-y-6">
                     {isInitializing ? (
@@ -638,8 +638,8 @@ ${
                                         type="text"
                                         placeholder={
                                             isStationOffline
-                                                ? "System offline - kan inte skanna"
-                                                : "Skanna kort eller ange UID"
+                                                ? "System offline - Cannot register"
+                                                : "Scan Card or Enter UID"
                                         }
                                         value={attendanceData.uid}
                                         onChange={(e) =>
@@ -665,7 +665,7 @@ ${
                                 >
                                     {isStationOffline
                                         ? "System Offline"
-                                        : "Registrera Närvaro"}
+                                        : "Register Attendance"}
                                 </button>
                             </form>
                         </>

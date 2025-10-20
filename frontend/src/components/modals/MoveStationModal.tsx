@@ -216,14 +216,6 @@ export const MoveStationModal = ({
                                         </DialogDescription>
                                     </div>
                                 </div>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleClose}
-                                    className="h-8 w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-                                >
-                                    <X className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                                </Button>
                             </div>
                         </DialogHeader>
 

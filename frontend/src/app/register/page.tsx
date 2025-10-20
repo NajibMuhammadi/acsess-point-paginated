@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { apiRequest } from "@/utils/api";
 
 export default function AdminRegisterPage() {
     const [formData, setFormData] = useState({
@@ -23,63 +24,16 @@ export default function AdminRegisterPage() {
             ...prev,
             [e.target.name]: e.target.value,
         }));
-        setMessage(""); // Rensa meddelanden när användaren skriver
-    };
-
-    const validateForm = () => {
-        if (!formData.registrationKey.trim()) {
-            setMessage("Registreringsnyckel krävs");
-            setIsError(true);
-            return false;
-        }
-
-        if (!formData.name.trim()) {
-            setMessage("Namn krävs");
-            setIsError(true);
-            return false;
-        }
-
-        if (!formData.email.trim()) {
-            setMessage("E-post krävs");
-            setIsError(true);
-            return false;
-        }
-
-        if (formData.password.length < 6) {
-            setMessage("Lösenord måste vara minst 6 tecken");
-            setIsError(true);
-            return false;
-        }
-
-        if (formData.password !== formData.confirmPassword) {
-            setMessage("Lösenorden matchar inte");
-            setIsError(true);
-            return false;
-        }
-
-        // E-post validering
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(formData.email)) {
-            setMessage("Ogiltig e-postadress");
-            setIsError(true);
-            return false;
-        }
-
-        // Namn validering (endast bokstäver och mellanslag)
-        const nameRegex = /^[a-zA-ZåäöÅÄÖ\s]+$/;
-        if (!nameRegex.test(formData.name.trim())) {
-            setMessage("Namnet får endast innehålla bokstäver och mellanslag");
-            setIsError(true);
-            return false;
-        }
-
-        return true;
+        setMessage("");
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!validateForm()) {
+        if (formData.password !== formData.confirmPassword) {
+            setMessage("Lösenorden matchar inte");
+            setIsError(true);
+            setLoading(false);
             return;
         }
 
@@ -87,40 +41,15 @@ export default function AdminRegisterPage() {
         setMessage("");
 
         try {
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/admin/registeradmin`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        registrationKey: formData.registrationKey,
-                        name: formData.name,
-                        email: formData.email,
-                        password: formData.password,
-                    }),
-                }
+            const { ok, data } = await apiRequest(
+                "/api/admin/register",
+                "POST",
+                formData
             );
-
-            const data = await response.json();
-
-            if (data.success) {
-                setMessage(
-                    "Admin registrerad framgångsrikt! Omdirigerar till inloggning..."
-                );
+            if (ok && data.success) {
+                setMessage(`${data.message} Omdirigerar...`);
                 setIsError(false);
 
-                // Rensa formuläret
-                setFormData({
-                    registrationKey: "",
-                    name: "",
-                    email: "",
-                    password: "",
-                    confirmPassword: "",
-                });
-
-                // Omdirigera till inloggningssidan efter 2 sekunder
                 setTimeout(() => {
                     window.location.href = "/login";
                 }, 2000);

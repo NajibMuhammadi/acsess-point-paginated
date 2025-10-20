@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, Trash2, Building2, Check } from "lucide-react";
+import { apiRequest } from "@/utils/api";
 
 interface DeleteBuildingModalProps {
     isOpen: boolean;
@@ -51,20 +52,14 @@ export function DeleteBuildingModal({
                 return;
             }
 
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/building/${building.buildingId}`,
-                {
-                    method: "DELETE",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                    },
-                }
+            const { ok, data } = await apiRequest(
+                `/api/building/${building.buildingId}`,
+                "DELETE",
+                null,
+                token
             );
 
-            const data = await response.json();
-
-            if (response.ok && data.success) {
+            if (ok && data.success) {
                 onSuccess();
                 onClose();
                 setIsSuccess(true);
@@ -126,7 +121,7 @@ export function DeleteBuildingModal({
                             <div className="space-y-4">
                                 <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                                     <div className="flex items-center gap-3 mb-3">
-                                        <Building2 className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                                        <Building2 className="w-4 h-4 text-blue-500 dark:text-blue-400" />
                                         <div>
                                             <p className="font-medium text-gray-900 dark:text-white">
                                                 {building.buildingName}
@@ -136,7 +131,9 @@ export function DeleteBuildingModal({
                                             </p>
                                         </div>
                                     </div>
-                                    <p className="text-gray-700 dark:text-gray-300 text-sm">
+                                </div>
+                                <div className="p-4 bg-orange-50 dark:bg-orange-900/30 rounded-lg border border-orange-200 dark:border-orange-800">
+                                    <p className="text-orange-800 dark:text-orange-300">
                                         Are you sure you want to permanently
                                         remove this building? This action cannot
                                         be undone and will delete all associated

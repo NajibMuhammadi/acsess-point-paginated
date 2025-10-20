@@ -14,6 +14,9 @@ import {
     XCircle,
     Calendar,
     Users,
+    MoreVertical,
+    Link2,
+    Trash2,
 } from "lucide-react";
 import {
     Select,
@@ -22,16 +25,26 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { AddStationModal } from "@/components/modals/AddStationModal";
 import { MoveStationModal } from "@/components/modals/MoveStationModal";
+import { DeleteStationModal } from "@/components/modals/DeleteStationModal";
 
-export default function BuildingsPage() {
+export default function StationsPage() {
     const [statusFilter, setStatusFilter] = useState("all");
     const [searchQuery, setSearchQuery] = useState("");
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
     const [selectedStation, setSelectedStation] = useState(null);
     const { buildings, stations, attendance, userData } = useAdminData();
+
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [stationToDelete, setStationToDelete] = useState(null);
 
     if (userData?.role !== "admin") {
         return (
@@ -212,7 +225,7 @@ export default function BuildingsPage() {
                                 <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                                     Station Approval
                                 </th>
-                                <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                                <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider text-right">
                                     Actions
                                 </th>
                             </tr>
@@ -335,24 +348,56 @@ export default function BuildingsPage() {
                                             </SelectContent>
                                         </Select>
                                     </td>
+                                    <td className="py-4 px-6 text-right">
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 p-0 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                                                >
+                                                    <MoreVertical className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
 
-                                    <td className="py-4 px-6">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() =>
-                                                handleMoveStation(station)
-                                            }
-                                            className={
-                                                station.buildingId
-                                                    ? "text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20 dark:text-red-400 rounded-lg"
-                                                    : "text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-800 dark:hover:bg-blue-900/20 dark:text-blue-400 rounded-lg"
-                                            }
-                                        >
-                                            {station.buildingId
-                                                ? "Disconnect"
-                                                : "Connect to Building"}
-                                        </Button>
+                                            <DropdownMenuContent
+                                                align="end"
+                                                className="w-44 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-md"
+                                            >
+                                                <DropdownMenuItem
+                                                    onClick={() =>
+                                                        handleMoveStation(
+                                                            station
+                                                        )
+                                                    }
+                                                    className={`cursor-pointer flex items-center ${
+                                                        station.buildingId
+                                                            ? "text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                                            : "text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                                    }`}
+                                                >
+                                                    <Link2 className="w-4 h-4 mr-2" />
+                                                    {station.buildingId
+                                                        ? "Disconnect"
+                                                        : "Connect to building"}
+                                                </DropdownMenuItem>
+
+                                                <DropdownMenuItem
+                                                    onClick={() => {
+                                                        setStationToDelete(
+                                                            station
+                                                        );
+                                                        setIsDeleteModalOpen(
+                                                            true
+                                                        );
+                                                    }}
+                                                    className="cursor-pointer flex items-center text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                                >
+                                                    <Trash2 className="w-4 h-4 mr-2" />
+                                                    Delete
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
                                     </td>
                                 </tr>
                             ))}
@@ -374,6 +419,14 @@ export default function BuildingsPage() {
                 station={selectedStation}
                 buildings={buildings}
                 onSuccess={handleMoveSuccess}
+            />
+            <DeleteStationModal
+                isOpen={isDeleteModalOpen}
+                onClose={() => setIsDeleteModalOpen(false)}
+                station={stationToDelete}
+                onSuccess={(deletedId) => {
+                    console.log("Deleted:", deletedId);
+                }}
             />
         </div>
     );

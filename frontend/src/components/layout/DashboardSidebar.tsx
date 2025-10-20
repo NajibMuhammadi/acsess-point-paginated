@@ -9,20 +9,29 @@ import {
     FileText,
     Settings,
     ChevronLeft,
+    AlertTriangle,
+    Users,
 } from "lucide-react";
-import { useAdminData } from "@/app/admin/layout";
+import { useAdminData } from "@/app/dashboard/layout";
 
 const navItems = [
-    { title: "Dashboard", icon: LayoutDashboard, path: "/admin" },
-    { title: "Buildings", icon: Building2, path: "/admin/buildings" },
+    { title: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
+    { title: "Buildings", icon: Building2, path: "/dashboard/buildings" },
     {
         title: "Stations",
         icon: Wifi,
-        path: "/admin/stations",
+        path: "/dashboard/stations",
         userRole: "admin",
     },
-    { title: "Attendance Logs", icon: FileText, path: "/admin/attendance" },
-    { title: "Settings", icon: Settings, path: "/settings" },
+    { title: "Larms", icon: AlertTriangle, path: "/dashboard/larm" },
+    {
+        title: "Users",
+        icon: Users,
+        path: "/dashboard/users",
+        userRole: "admin",
+    },
+    { title: "Attendance Logs", icon: FileText, path: "/dashboard/attendance" },
+    { title: "Settings", icon: Settings, path: "/dashboard/settings" },
 ];
 
 export const DashboardSidebar = () => {
@@ -79,8 +88,8 @@ export const DashboardSidebar = () => {
                             )
                             .map((item) => {
                                 const isActive =
-                                    item.path === "/admin"
-                                        ? pathname === "/admin"
+                                    item.path === "/dashboard"
+                                        ? pathname === "/dashboard"
                                         : pathname.startsWith(item.path);
 
                                 return (

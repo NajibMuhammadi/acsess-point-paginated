@@ -10,6 +10,13 @@ import { Building2, Search, Plus, MapPin, Users, Wifi } from "lucide-react";
 import { AddBuildingModal } from "@/components/modals/AddBuildingModal";
 import { BuildingDetailsModal } from "@/components/modals/BuildingDetailsModal";
 import { DeleteBuildingModal } from "@/components/modals/DeleteBuildingModal";
+import {
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import { MoreVertical, Trash2, Eye } from "lucide-react";
 
 export default function BuildingsPage() {
     const [searchQuery, setSearchQuery] = useState("");
@@ -104,7 +111,7 @@ export default function BuildingsPage() {
                                         Stations
                                     </th>
                                 )}
-                                <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                                <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider text-right">
                                     Actions
                                 </th>
                             </tr>
@@ -128,7 +135,11 @@ export default function BuildingsPage() {
                                 return (
                                     <tr
                                         key={building.buildingId}
-                                        className="hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors"
+                                        onClick={() =>
+                                            handleViewDetails(building)
+                                        }
+                                        title="Click to view details"
+                                        className="hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors cursor-pointer"
                                     >
                                         <td className="py-4 px-6">
                                             <div className="flex items-center gap-3">
@@ -191,35 +202,41 @@ export default function BuildingsPage() {
                                                 </div>
                                             </td>
                                         )}
-                                        <td className="py-4 px-6">
-                                            <div className="flex items-center gap-2">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        handleViewDetails(
-                                                            building
-                                                        )
-                                                    }
-                                                    className="text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-800 dark:hover:bg-blue-900/20 dark:text-blue-400 rounded-lg"
-                                                >
-                                                    View Details
-                                                </Button>
-                                                {userData?.role === "admin" && (
+                                        <td
+                                            className="py-4 px-6 text-right"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
                                                     <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() =>
-                                                            handleDeleteBuilding(
-                                                                building
-                                                            )
-                                                        }
-                                                        className="text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20 dark:text-red-400 rounded-lg"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 p-0 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
                                                     >
-                                                        Remove
+                                                        <MoreVertical className="h-4 w-4" />
                                                     </Button>
-                                                )}
-                                            </div>
+                                                </DropdownMenuTrigger>
+
+                                                <DropdownMenuContent
+                                                    align="end"
+                                                    className="w-44 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-md"
+                                                >
+                                                    {userData?.role ===
+                                                        "admin" && (
+                                                        <DropdownMenuItem
+                                                            onClick={() => {
+                                                                handleDeleteBuilding(
+                                                                    building
+                                                                );
+                                                            }}
+                                                            className="cursor-pointer flex items-center text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                                        >
+                                                            <Trash2 className="w-4 h-4 mr-2" />
+                                                            Delete
+                                                        </DropdownMenuItem>
+                                                    )}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </td>
                                     </tr>
                                 );

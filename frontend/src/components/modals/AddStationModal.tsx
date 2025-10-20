@@ -20,6 +20,7 @@ import {
     AlertCircle,
     Loader2,
 } from "lucide-react";
+import { apiRequest } from "@/utils/api";
 
 interface AddStationModalProps {
     isOpen: boolean;
@@ -80,21 +81,14 @@ export const AddStationModal = ({
         setMessage("");
 
         try {
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/station/create-station`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({ stationName }),
-                }
+            const { ok, data } = await apiRequest(
+                "/api/station/create-station",
+                "POST",
+                { stationName },
+                token
             );
 
-            const data = await response.json();
-
-            if (response.ok) {
+            if (ok && data.success) {
                 setCreatedStation({
                     stationId: data.stationId,
                     stationName: data.stationName,
@@ -107,13 +101,7 @@ export const AddStationModal = ({
                 );
 
                 // Call success callback if provided
-                if (onSuccess) {
-                    onSuccess({
-                        stationId: data.stationId,
-                        stationName: data.stationName,
-                        secret: data.secret,
-                    });
-                }
+                onSuccess?.(createdStation);
 
                 // Auto-close after 2 seconds
                 setTimeout(() => {
@@ -132,6 +120,7 @@ export const AddStationModal = ({
     };
 
     const copyToClipboard = (text: string) => {
+        if (!text) return;
         navigator.clipboard.writeText(text);
         alert("Kopierat till urklipp!");
     };
