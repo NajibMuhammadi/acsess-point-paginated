@@ -21,7 +21,11 @@ const server = http.createServer(app);
 
 export const io = new Server(server, {
     cors: {
-        origin: ["https://checkpoint.app.serima.se", "http://localhost:3000"],
+        origin: [
+            "https://checkpoint.app.serima.se",
+            "http://localhost:3000",
+            "https://b.serima.se",
+        ],
         credentials: true,
         methods: ["GET", "POST", "PUT", "DELETE"],
     },
@@ -40,7 +44,8 @@ app.use((req, res, next) => {
     res.header(
         "Access-Control-Allow-Origin",
         "https://checkpoint.app.serima.se",
-        "http://localhost:3000"
+        "http://localhost:3000",
+        "https://b.serima.se"
     );
     res.header(
         "Access-Control-Allow-Methods",
