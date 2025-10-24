@@ -29,6 +29,8 @@ export const RecentActivity = ({
         return colors[index % colors.length];
     };
 
+    console.log("Recent Activity Component:", recentActivity);
+
     return (
         <div className="bg-white dark:bg-primary/10 rounded-xl p-6 border border-gray-200 dark:border-slate-700/50">
             <div className="mb-6">

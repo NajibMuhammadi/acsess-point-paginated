@@ -32,7 +32,7 @@ export default function AdminLoginPage() {
 
         try {
             const { ok, data } = await apiRequest(
-                "/api/admin/login",
+                "/api/user/login",
                 "POST",
                 formData
             );

@@ -7,14 +7,14 @@ import jwt from "jsonwebtoken";
 
 import { connectDB } from "./config/db.js";
 import stationRouter from "./routes/stationRoutes.js";
-import adminRouter from "./routes/adminRoutes.js";
+import userRouter from "./routes/userRoutes.js";
 import buildingRouter from "./routes/buildingRoutes.js";
-import attendanceRouter from "./routes/attendanceRoutes.js";
-import { startHeartbeatMonitor } from "./controllers/stationController.js";
 import alarmRouter from "./routes/alarmRoutes.js";
+import attendanceRoutes from "./routes/attendanceRoutes.js";
+import { startHeartbeatMonitor } from "./controllers/stationController.js";
 
 dotenv.config();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 const app = express();
 const server = http.createServer(app);
@@ -58,10 +58,10 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-app.use("/api/admin", adminRouter);
+app.use("/api/user", userRouter);
 app.use("/api/building", buildingRouter);
+app.use("/api/attendance", attendanceRoutes);
 app.use("/api/station", stationRouter);
-app.use("/api/attendance", attendanceRouter);
 app.use("/api/alarm", alarmRouter);
 
 // Håller koll på anslutna stationer

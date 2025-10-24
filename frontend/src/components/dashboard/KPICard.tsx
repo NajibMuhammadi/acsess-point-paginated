@@ -5,10 +5,6 @@ interface KPICardProps {
     title: string;
     value: string | number;
     subtitle?: string;
-    trend?: {
-        value: number;
-        isPositive: boolean;
-    };
 }
 
 export const KPICard = ({
@@ -16,7 +12,6 @@ export const KPICard = ({
     title,
     value,
     subtitle,
-    trend,
 }: KPICardProps) => {
     return (
         <div className="rounded-xl bg-white p-6 shadow-sm dark:bg-background-dark dark:bg-primary/10">
@@ -44,15 +39,6 @@ export const KPICard = ({
                         )}
                     </div>
                 </div>
-                {trend && (
-                    <div
-                        className={`text-xs sm:text-sm font-semibold flex-shrink-0 ${
-                            trend.isPositive ? "text-green-600" : "text-red-600"
-                        }`}
-                    >
-                        {trend.isPositive ? "↑" : "↓"} {Math.abs(trend.value)}%
-                    </div>
-                )}
             </div>
         </div>
     );

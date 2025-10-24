@@ -4,9 +4,8 @@ import { useEffect, useState } from "react";
 import {
     Search,
     MoreVertical,
-    CheckCircle,
-    Trash2,
     ShieldCheck,
+    Trash2,
     UserCog,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,42 +28,63 @@ function getUserToken() {
 export default function UserManagementPage() {
     const [users, setUsers] = useState<any[]>([]);
     const [search, setSearch] = useState("");
+    const [page, setPage] = useState(1); // 🟢 pagination
+    const [limit, setLimit] = useState(25); // 🟢 antal per sida
+    const [totalPages, setTotalPages] = useState(1);
+    const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
 
-    // 🔹 Hämta alla användare
+    // ============================================================
+    // 🔹 Hämta alla användare med pagination
+    // ============================================================
     const fetchUsers = async () => {
         const token = getUserToken();
         if (!token) return;
+        setLoading(true);
 
         try {
             const res = await fetch(
-                `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/admin/users`,
+                `${
+                    process.env.NEXT_PUBLIC_API_BASE_URL
+                }/api/user/all?page=${page}&limit=${limit}&search=${encodeURIComponent(
+                    search
+                )}`,
                 {
                     headers: { Authorization: `Bearer ${token}` },
                     credentials: "include",
                 }
             );
+
             const data = await res.json();
-            if (data.success) setUsers(data.users || []);
+            if (data.success) {
+                setUsers(data.users || []);
+                setTotalPages(data.totalPages || 1);
+                setTotal(data.total || 0);
+            } else {
+                console.error("❌ Error fetching users:", data.message);
+            }
         } catch (err) {
-            console.error("❌ Error fetching users:", err);
+            console.error("❌ Fetch users error:", err);
         } finally {
             setLoading(false);
         }
     };
 
+    // 🟢 Kör vid ändring av page, limit eller search
     useEffect(() => {
         fetchUsers();
-    }, []);
+    }, [page, limit, search]);
 
-    // ✅ Approve user
+    // ============================================================
+    // ✅ Godkänn användare
+    // ============================================================
     const approveUser = async (userId: string) => {
         const token = getUserToken();
         if (!token) return;
 
         try {
             const res = await fetch(
-                `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/admin/approve-user`,
+                `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/user/approve`,
                 {
                     method: "PUT",
                     headers: {
@@ -88,14 +108,16 @@ export default function UserManagementPage() {
         }
     };
 
+    // ============================================================
     // 🛠️ Ändra roll
+    // ============================================================
     const changeUserRole = async (userId: string, role: string) => {
         const token = getUserToken();
         if (!token) return;
 
         try {
             const res = await fetch(
-                `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/admin/change-role`,
+                `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/user/role`,
                 {
                     method: "PUT",
                     headers: {
@@ -117,7 +139,9 @@ export default function UserManagementPage() {
         }
     };
 
+    // ============================================================
     // ❌ Ta bort användare
+    // ============================================================
     const deleteUser = async (userId: string) => {
         const token = getUserToken();
         if (!token) return;
@@ -126,7 +150,7 @@ export default function UserManagementPage() {
 
         try {
             const res = await fetch(
-                `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/admin/delete-user/${userId}`,
+                `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/user/${userId}`,
                 {
                     method: "DELETE",
                     headers: { Authorization: `Bearer ${token}` },
@@ -142,11 +166,15 @@ export default function UserManagementPage() {
         }
     };
 
-    const filteredUsers = users.filter(
-        (u) =>
-            u.name?.toLowerCase().includes(search.toLowerCase()) ||
-            u.email?.toLowerCase().includes(search.toLowerCase())
-    );
+    // ============================================================
+    // 🧭 Paginering & UI
+    // ============================================================
+    const handleNextPage = () => {
+        if (page < totalPages) setPage(page + 1);
+    };
+    const handlePrevPage = () => {
+        if (page > 1) setPage(page - 1);
+    };
 
     return (
         <div className="px-6 py-8 md:px-12 lg:px-20 xl:px-32 space-y-8">
@@ -162,14 +190,40 @@ export default function UserManagementPage() {
             </div>
 
             {/* Search */}
-            <div className="relative w-full md:w-1/3">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <Input
-                    placeholder="Search by name or email..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="pl-10 h-11 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
+            <div className="flex flex-wrap gap-4 items-center justify-between">
+                <div className="relative w-full md:w-1/3">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Input
+                        placeholder="Search by name or email..."
+                        value={search}
+                        onChange={(e) => {
+                            setPage(1);
+                            setSearch(e.target.value);
+                        }}
+                        className="pl-10 h-11 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                </div>
+
+                {/* 🟢 Limit dropdown */}
+                <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-500 dark:text-gray-400">
+                        Rows per page:
+                    </label>
+                    <select
+                        value={limit}
+                        onChange={(e) => {
+                            setLimit(Number(e.target.value));
+                            setPage(1);
+                        }}
+                        className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200"
+                    >
+                        {[25, 50, 100, 1000].map((val) => (
+                            <option key={val} value={val}>
+                                {val}
+                            </option>
+                        ))}
+                    </select>
+                </div>
             </div>
 
             {/* Table */}
@@ -207,7 +261,7 @@ export default function UserManagementPage() {
                                     Loading users...
                                 </td>
                             </tr>
-                        ) : filteredUsers.length === 0 ? (
+                        ) : users.length === 0 ? (
                             <tr>
                                 <td
                                     colSpan={6}
@@ -217,7 +271,7 @@ export default function UserManagementPage() {
                                 </td>
                             </tr>
                         ) : (
-                            filteredUsers.map((user) => (
+                            users.map((user) => (
                                 <tr
                                     key={user.userId}
                                     className="hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors"
@@ -338,6 +392,29 @@ export default function UserManagementPage() {
                         )}
                     </tbody>
                 </table>
+            </div>
+
+            {/* 🟢 Pagination Controls */}
+            <div className="flex justify-between items-center mt-6">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Page {page} of {totalPages} — {total} users
+                </p>
+                <div className="flex gap-2">
+                    <Button
+                        variant="outline"
+                        disabled={page === 1}
+                        onClick={handlePrevPage}
+                    >
+                        Previous
+                    </Button>
+                    <Button
+                        variant="outline"
+                        disabled={page === totalPages}
+                        onClick={handleNextPage}
+                    >
+                        Next
+                    </Button>
+                </div>
             </div>
         </div>
     );

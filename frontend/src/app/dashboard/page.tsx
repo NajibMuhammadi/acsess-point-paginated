@@ -8,113 +8,118 @@ import { BuildingsTable } from "@/components/dashboard/BuildingsTable";
 import { Building2, Users, Radio, Network } from "lucide-react";
 
 export default function AdminPage() {
-    const { userData, buildings, stations, attendance, visitors } =
-        useAdminData();
+    const {
+        userData,
+        buildings,
+        stations,
+        visitors,
+        weeklyData,
+        recentAttendance,
+        dashboardStats,
+    } = useAdminData();
+
+    console.log("🕐 Recent Attendance in AdminPage:", dashboardStats);
 
     const totalBuildings = buildings.length;
     const activeStations = stations.filter((s) => s.buildingId);
     const totalStations = stations.length;
-    const totalActiveUsers = attendance.filter((a) => !a.checkOutTime).length;
 
-    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-    // Hämta nuvarande datum
-    const now = new Date();
-
-    // Beräkna start på veckan (måndag)
-    const startOfWeek = new Date(now);
-    // 6 dagar tillbaks om idag är söndag
-    startOfWeek.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-    // Sätta timmar, minuter, sekunder och millisekunder till 0
-    startOfWeek.setHours(0, 0, 0, 0);
-
-    // Gruppér check-ins per dag i veckan
-    const weeklyData = days.map((day, index) => {
-        // Hitta dagens datum
-        const dayStart = new Date(startOfWeek);
-        // Sätt datum till dagens datum plus index
-        dayStart.setDate(startOfWeek.getDate() + index);
-
-        const dayEnd = new Date(dayStart);
-        dayEnd.setDate(dayStart.getDate() + 1);
-
-        const checkIns = attendance.filter((a) => {
-            const checkInDate = new Date(a.checkInTime || a.timestamp);
-            return checkInDate >= dayStart && checkInDate < dayEnd;
-        }).length;
-
-        return { day, checkIns };
-    });
-
-    const recentActivity = attendance
+    // 🔹 Omvandla recentAttendance till rätt format för RecentActivity-komponenten
+    // 🟢 Transformera attendance till separata check-in och check-out events
+    const recentActivity = (recentAttendance || [])
         .filter((a) => Boolean(a.visitorId))
-        .sort((a, b) => {
-            const timeA = new Date(
-                a.checkOutTime || a.checkInTime || a.timestamp
-            ).getTime();
-            const timeB = new Date(
-                b.checkOutTime || b.checkInTime || b.timestamp
-            ).getTime();
-            return timeB - timeA;
-        })
-        .slice(0, 5)
-        .map((a) => {
-            const building = buildings.find(
-                (b) => b.buildingId === a.buildingId
-            );
-            const visitor = visitors.find((v) => v.visitorId === a.visitorId);
-
-            const type: "in" | "out" = a.checkOutTime ? "out" : "in";
-            const displayTime = new Date(
-                a.checkOutTime || a.checkInTime || a.timestamp
-            ).toLocaleString("sv-SE", {
-                dateStyle: "short",
-                timeStyle: "short",
-            });
+        .flatMap((a) => {
+            const building =
+                buildings.find(
+                    (b) =>
+                        b.buildingId === a.buildingId || b._id === a.buildingId
+                ) || null;
+            const visitor =
+                visitors.find((v) => v.visitorId === a.visitorId) || null;
 
             const visitType =
-                visitor?.type === "personal"
+                a.type === "personal"
+                    ? "Personal"
+                    : a.type === "business"
+                    ? "Business"
+                    : visitor?.type === "personal"
                     ? "Personal"
                     : visitor?.type === "business"
                     ? "Business"
                     : "Okänd typ";
-            return {
-                attendanceId: a.attendanceId,
-                time: displayTime,
+
+            const events = [];
+
+            // 🟢 Lägg alltid till check-in event
+            events.push({
+                attendanceId: `${a.attendanceId}-in`,
+                time: new Date(a.checkInTime).toLocaleString("sv-SE", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                }),
+                timestamp: new Date(a.checkInTime).getTime(),
                 building: building?.buildingName || "Okänd byggnad",
-                visitor: visitor?.visitorName || "Okänd besökare",
-                uid: a.uid,
+                visitor:
+                    a.visitorName || visitor?.visitorName || "Okänd besökare",
+                uid: a.uid || "-",
                 station: a.stationId || "Okänd station",
-                type,
+                type: "in" as const,
                 visitType,
-            };
-        });
+            });
+
+            // 🟢 Lägg till check-out event om det finns
+            if (a.checkOutTime) {
+                events.push({
+                    attendanceId: `${a.attendanceId}-out`,
+                    time: new Date(a.checkOutTime).toLocaleString("sv-SE", {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                    }),
+                    timestamp: new Date(a.checkOutTime).getTime(),
+                    building: building?.buildingName || "Okänd byggnad",
+                    visitor:
+                        a.visitorName ||
+                        visitor?.visitorName ||
+                        "Okänd besökare",
+                    uid: a.uid || "-",
+                    station: a.stationId || "Okänd station",
+                    type: "out" as const,
+                    visitType,
+                });
+            }
+
+            return events;
+        })
+        .sort((a, b) => b.timestamp - a.timestamp) // 🟢 Sortera efter senaste först
+        .slice(0, 5); // 🟢 Ta bara de 5 senaste
 
     return (
         <div className="space-y-6 sm:space-y-8 pb-24 sm:pb-8">
+            {/* 🔹 KPI cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
                 <KPICard
                     icon={Building2}
                     title="Total Buildings"
-                    value={totalBuildings}
+                    value={dashboardStats.totalBuildings}
                 />
                 <KPICard
                     icon={Radio}
                     title="Active Stations"
-                    value={activeStations.length}
+                    value={dashboardStats.activeStations}
                 />
                 <KPICard
                     icon={Network}
                     title="Total Stations"
-                    value={totalStations}
+                    value={dashboardStats.totalStations}
                 />
                 <KPICard
                     icon={Users}
                     title="Total Active Users"
-                    value={totalActiveUsers}
+                    value={dashboardStats.currentlyCheckedIn}
                 />
             </div>
 
+            {/* 🔹 Attendance chart + recent activity */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
                 <div className="lg:col-span-2">
                     <AttendanceChart userData={weeklyData} />
@@ -124,10 +129,11 @@ export default function AdminPage() {
                 </div>
             </div>
 
+            {/* 🔹 (Optional) Building table */}
             <BuildingsTable
                 buildings={buildings}
                 stations={stations}
-                attendance={attendance}
+                /*  attendance={attendance} */
                 isAdmin={userData?.role === "admin"}
             />
         </div>

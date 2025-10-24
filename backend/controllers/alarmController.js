@@ -1,47 +1,57 @@
-import { getCompaniesCollection } from "../config/db.js";
-import { io } from "../server.js";
 import crypto from "crypto";
+import { io } from "../server.js";
+import {
+    getCompaniesCollection,
+    getBuildingsCollection,
+    getVisitorsCollection,
+    getAttendanceCollection,
+    getAlarmsCollection,
+} from "../config/db.js";
 
+// ============================================================
+// 🚨 Hantera larm (aktivering, loggning, utskick)
+// ============================================================
 export async function handleAlarm(req, res) {
     try {
         const { buildingId, alarmCode } = req.body;
+        const companyId = req.user.companyId;
 
-        if (!buildingId) {
+        if (!buildingId)
             return res
                 .status(400)
-                .json({ message: "buildingId is required", success: false });
-        }
+                .json({ message: "buildingId krävs", success: false });
 
-        if (typeof alarmCode === "undefined") {
+        if (typeof alarmCode === "undefined")
             return res
                 .status(400)
-                .json({ message: "alarmCode is required", success: false });
-        }
+                .json({ message: "alarmCode krävs", success: false });
 
         const companiesCol = getCompaniesCollection();
-        const company = await companiesCol.findOne({
-            "buildings.buildingId": buildingId,
-        });
+        const buildingsCol = getBuildingsCollection();
+        const attendanceCol = getAttendanceCollection();
+        const visitorsCol = getVisitorsCollection();
+        const alarmsCol = getAlarmsCollection();
 
-        if (!company) {
+        const company = await companiesCol.findOne({ companyId });
+        if (!company)
+            return res
+                .status(404)
+                .json({ success: false, message: "Företag hittades inte" });
+
+        const building = await buildingsCol.findOne({
+            companyId,
+            buildingId,
+        });
+        if (!building)
             return res.status(404).json({
                 success: false,
-                message: "Ingen byggnad hittades",
+                message: "Byggnad hittades inte",
             });
-        }
-
-        // Hitta byggnaden i företaget
-        const building = company.buildings.find(
-            (b) => b.buildingId === buildingId
-        );
 
         console.log(
-            `🚨 Larmkod ${alarmCode} aktiverad för byggnad: ${
-                building?.buildingName || buildingId
-            }`
+            `🚨 Larmkod ${alarmCode} aktiverad för byggnad: ${building.buildingName}`
         );
 
-        // Bestäm meddelandet beroende på alarmCode
         let fakeMessage;
         switch (alarmCode) {
             case 1:
@@ -61,92 +71,67 @@ export async function handleAlarm(req, res) {
                     "⚠️ Okänt larm utlöst. Kontrollera situationen omedelbart.";
         }
 
-        // Filtrera fram de som är incheckade i byggnaden just nu
-        const activeAttendances = (company.attendance || []).filter(
-            (a) =>
-                a.buildingId === buildingId && a.checkInTime && !a.checkOutTime // fortfarande incheckade
-        );
+        const activeAttendances = await attendanceCol
+            .find({
+                companyId,
+                buildingId,
+                checkOutTime: { $exists: false },
+            })
+            .toArray();
+
+        const visitorIds = activeAttendances.map((a) => a.visitorId);
+        const visitors = await visitorsCol
+            .find({ companyId, visitorId: { $in: visitorIds } })
+            .toArray();
+
+        const people = activeAttendances.map((a) => {
+            const visitor = visitors.find((v) => v.visitorId === a.visitorId);
+            return {
+                visitorId: visitor?.visitorId || a.visitorId,
+                visitorName:
+                    visitor?.visitorName || a.visitorName || "Okänd besökare",
+                phoneNumber: visitor?.phoneNumber || "ingen telefon",
+            };
+        });
 
         const alarmLog = {
             alarmId: crypto.randomUUID(),
+            companyId,
             buildingId,
-            buildingName: building?.buildingName || "Okänd byggnad",
+            buildingName: building.buildingName,
             alarmType: alarmCode,
             message: fakeMessage,
-            totalPeople: activeAttendances.length,
-            people: activeAttendances.map((a) => {
-                const visitor = company.visitors.find(
-                    (v) => v.visitorId === a.visitorId
-                );
-                return {
-                    visitorId: visitor?.visitorId || a.visitorId,
-                    visitorName:
-                        visitor?.visitorName || a.visitorName || "Okänd",
-                    phoneNumber: visitor?.phoneNumber || "ingen telefon",
-                };
-            }),
+            totalPeople: people.length,
+            people,
             createdAt: new Date(),
             acknowledged: false,
             acknowledgedBy: null,
             acknowledgedAt: null,
         };
 
-        if (activeAttendances.length === 0) {
-            await companiesCol.updateOne(
-                { _id: company._id },
-                { $push: { alarms: alarmLog } }
-            );
+        await alarmsCol.insertOne(alarmLog);
 
-            io.emit("alarmTriggered", {
-                alarmId: alarmLog.alarmId,
-                buildingId,
-                buildingName: building?.buildingName || "Okänd byggnad",
-                alarmType: alarmCode,
-                message: fakeMessage,
-                totalPeople: 0,
-                timestamp: new Date().toISOString(),
-            });
-
-            return res.status(200).json({
-                success: true,
-                message: "Inga aktiva personer i byggnaden (larm loggat)",
-            });
-        }
-
-        // Skapa fejk-SMS och logga
-        for (const a of activeAttendances) {
-            const visitor = company.visitors.find(
-                (v) => v.visitorId === a.visitorId
-            );
-
-            const phone = visitor?.phoneNumber || "ingen telefon";
-            const name = a.visitorName || "Okänd person";
-
+        if (people.length > 0) {
+            for (const p of people) {
+                console.log(
+                    `📲 [FEJK-SMS SKICKAT] till ${p.visitorName} (${p.phoneNumber}): "${fakeMessage}"`
+                );
+            }
+        } else {
             console.log(
-                `📲 [FEJK-SMS SKICKAT] till ${name} (${phone}): "${fakeMessage}"`
+                "⚠️ Inga aktiva personer i byggnaden – endast loggat larm."
             );
         }
 
-        await companiesCol.updateOne(
-            { _id: company._id },
-            { $push: { alarms: alarmLog } }
-        );
-
-        console.log("📡 Skickar larm till alla klienter...");
-        io.emit("alarmTriggered", {
-            alarmId: alarmLog.alarmId,
-            buildingId,
-            buildingName: building?.buildingName || "Okänd byggnad",
-            alarmType: alarmCode,
-            message: fakeMessage,
-            totalPeople: activeAttendances.length,
+        // ✅ Skicka alltid realtid
+        io.to(companyId).emit("alarmTriggered", {
+            ...alarmLog,
             timestamp: new Date().toISOString(),
         });
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
-            message: `Fejk-SMS skickat till ${activeAttendances.length} personer i byggnaden (se loggar)`,
-            alarmType: alarmCode,
+            message: `Larm loggat (${people.length} personer, byggnad: ${building.buildingName})`,
         });
     } catch (err) {
         console.error("💥 Fel vid hantering av larm:", err);
@@ -157,21 +142,48 @@ export async function handleAlarm(req, res) {
     }
 }
 
-export async function getAllAlarms(req, res) {
+// ============================================================
+// 🔍 Hämta alla larm – med pagination
+// ============================================================
+export async function getPaginatedAlarms(req, res) {
     try {
-        const companiesCol = getCompaniesCollection();
-        const company = await companiesCol.findOne({ _id: req.user.companyId });
+        const companyId = req.user.companyId;
+        const alarmsCol = getAlarmsCollection();
 
-        if (!company) {
-            return res
-                .status(404)
-                .json({ success: false, message: "Företag hittades inte" });
+        // 💬 Query-parametrar
+        const { page = 1, limit = 25, search = "" } = req.query;
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+
+        const query = { companyId };
+
+        // 💬 Sök i text (buildingName, message)
+        if (search && search.trim()) {
+            query.$or = [
+                { buildingName: { $regex: search, $options: "i" } },
+                { message: { $regex: search, $options: "i" } },
+            ];
         }
 
-        const alarms = company.alarms || [];
-        res.status(200).json({ success: true, alarms });
+        const total = await alarmsCol.countDocuments(query);
+        const totalPages = Math.ceil(total / limitNum);
+
+        const alarms = await alarmsCol
+            .find(query)
+            .sort({ createdAt: -1 })
+            .skip((pageNum - 1) * limitNum)
+            .limit(limitNum)
+            .toArray();
+
+        res.status(200).json({
+            success: true,
+            alarms,
+            total,
+            totalPages,
+            page: pageNum,
+        });
     } catch (err) {
-        console.error("💥 Fel vid hämtning av larm:", err);
+        console.error("💥 Fel vid hämtning av paginerade larm:", err);
         res.status(500).json({
             success: false,
             message: "Internt fel vid hämtning av larm",
@@ -179,45 +191,41 @@ export async function getAllAlarms(req, res) {
     }
 }
 
+// ============================================================
+// ✅ Kvittera / markera ett larm som läst
+// ============================================================
 export async function acknowledgeAlarm(req, res) {
     try {
         const { alarmId } = req.body;
+        const companyId = req.user.companyId;
+        const userId = req.user.userId;
+        const alarmsCol = getAlarmsCollection();
+
         if (!alarmId)
-            return res.status(400).json({
-                success: false,
-                message: "alarmId krävs",
-            });
+            return res
+                .status(400)
+                .json({ success: false, message: "alarmId krävs" });
 
-        const companiesCol = getCompaniesCollection();
-        const company = await companiesCol.findOne({ _id: req.user.companyId });
-        if (!company)
-            return res.status(404).json({
-                success: false,
-                message: "Företag hittades inte",
-            });
-
-        const result = await companiesCol.updateOne(
-            { _id: company._id, "alarms.alarmId": alarmId },
+        const result = await alarmsCol.updateOne(
+            { companyId, alarmId },
             {
                 $set: {
-                    "alarms.$.acknowledged": true,
-                    "alarms.$.acknowledgedBy": req.user.userId,
-                    "alarms.$.acknowledgedAt": new Date(),
+                    acknowledged: true,
+                    acknowledgedBy: userId,
+                    acknowledgedAt: new Date(),
                 },
             }
         );
 
-        if (result.modifiedCount === 0) {
-            return res.status(404).json({
-                success: false,
-                message: "Larm hittades inte",
-            });
-        }
+        if (result.matchedCount === 0)
+            return res
+                .status(404)
+                .json({ success: false, message: "Larm hittades inte" });
 
-        // 🔥 Skicka realtidsuppdatering till alla admins i samma företag
-        io.to(req.user.companyId.toString()).emit("alarmAcknowledged", {
+        // 🔸 Realtidsuppdatering
+        io.to(companyId).emit("alarmAcknowledged", {
             alarmId,
-            acknowledgedBy: req.user.userId,
+            acknowledgedBy: userId,
             acknowledgedAt: new Date(),
         });
 
@@ -227,52 +235,52 @@ export async function acknowledgeAlarm(req, res) {
         });
     } catch (err) {
         console.error("💥 Fel vid uppdatering av larm:", err);
-        res.status(500).json({ success: false, message: "Internt fel" });
+        res.status(500).json({
+            success: false,
+            message: "Internt fel vid kvittering",
+        });
     }
 }
-
 export async function getAlarmById(req, res) {
     try {
         const { alarmId } = req.params;
         const companyId = req.user.companyId;
 
-        const companiesCol = getCompaniesCollection();
-        const company = await companiesCol.findOne(
-            { _id: companyId, "alarms.alarmId": alarmId },
-            { projection: { "alarms.$": 1, buildings: 1 } } // 🟢 lägg till buildings här
-        );
+        const alarmsCol = getAlarmsCollection();
+        const buildingsCol = getBuildingsCollection();
 
-        if (!company || !company.alarms || company.alarms.length === 0) {
+        // 🔹 Hitta larmet baserat på companyId + alarmId
+        const alarm = await alarmsCol.findOne({ companyId, alarmId });
+        if (!alarm) {
             return res.status(404).json({
                 success: false,
-                message: "Alarm not found",
+                message: "Larm hittades inte",
             });
         }
 
-        const alarm = company.alarms[0];
-
-        // 🔹 Nu funkar detta eftersom company.buildings finns
-        const building = (company.buildings || []).find(
-            (b) => b.buildingId === alarm.buildingId
-        );
+        // 🔹 Hämta byggnadsinfo
+        const building = await buildingsCol.findOne({
+            companyId,
+            buildingId: alarm.buildingId,
+        });
 
         const detailedAlarm = {
             ...alarm,
-            buildingName: building ? building.buildingName : "Unknown",
+            buildingName: building ? building.buildingName : "Okänd byggnad",
             totalPeople: alarm.totalPeople || 0,
             notes: alarm.notes || [],
             history: alarm.history || [],
         };
 
-        return res.status(200).json({
+        res.status(200).json({
             success: true,
             alarm: detailedAlarm,
         });
     } catch (error) {
-        console.error("❌ getAlarmById error:", error);
+        console.error("💥 Fel vid hämtning av larm:", error);
         res.status(500).json({
             success: false,
-            message: "Internal server error",
+            message: "Internt fel vid hämtning av larm",
         });
     }
 }

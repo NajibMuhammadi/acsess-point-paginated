@@ -1,385 +1,356 @@
 "use client";
 
 import { useAdminData } from "../layout";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
-    Building2,
+    Wifi,
     Search,
     Plus,
-    Wifi,
+    Building2,
+    Users,
     CheckCircle2,
     XCircle,
     Calendar,
-    Users,
     MoreVertical,
-    Link2,
     Trash2,
+    Link2,
+    ChevronLeft,
+    ChevronRight,
 } from "lucide-react";
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
-import {
     DropdownMenu,
+    DropdownMenuTrigger,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { apiRequest } from "@/utils/api";
 import { AddStationModal } from "@/components/modals/AddStationModal";
 import { MoveStationModal } from "@/components/modals/MoveStationModal";
 import { DeleteStationModal } from "@/components/modals/DeleteStationModal";
+import { Badge } from "@/components/ui/badge";
 
 export default function StationsPage() {
-    const [statusFilter, setStatusFilter] = useState("all");
+    const { buildings, stationRefreshKey } = useAdminData();
+
+    const [localStations, setLocalStations] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
+    const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(25);
+    const [totalPages, setTotalPages] = useState(1);
+    const [total, setTotal] = useState(0);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
-    const [selectedStation, setSelectedStation] = useState(null);
-    const { buildings, stations, attendance, userData } = useAdminData();
-
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-    const [stationToDelete, setStationToDelete] = useState(null);
+    const [selectedStation, setSelectedStation] = useState<any>(null);
+    const [stationToDelete, setStationToDelete] = useState<any>(null);
 
-    if (userData?.role !== "admin") {
-        return (
-            <div className="flex items-center justify-center h-96">
-                <div className="text-center">
-                    <h1 className="text-3xl font-bold text-foreground mb-2">
-                        Access Denied
-                    </h1>
-                    <p className="text-muted-foreground">
-                        You do not have permission to view this page.
-                    </p>
-                </div>
-            </div>
+    const token =
+        typeof window !== "undefined"
+            ? localStorage.getItem("userToken")
+            : null;
+
+    // ============================================================
+    // 💬 Hämtar stationer med pagination
+    // ============================================================
+    async function fetchPaginatedStations() {
+        if (!token) return;
+        const { ok, data } = await apiRequest(
+            `/api/station/allpaginated?page=${page}&limit=${limit}&search=${searchQuery}`,
+            "GET",
+            null,
+            token
         );
+        if (ok && data.success) {
+            setLocalStations(data.stations);
+            setTotalPages(data.totalPages);
+            setTotal(data.total);
+        } else {
+            console.error("❌ Failed to fetch stations:", data?.message);
+        }
     }
 
-    const handleBuildingAdded = (newBuilding: any) => {
-        console.log("Ny station tillagd:", newBuilding);
-    };
-
-    const handleMoveStation = (station: any) => {
-        setSelectedStation(station);
-        setIsMoveModalOpen(true);
-    };
-
-    const handleMoveSuccess = () => {
-        console.log("Station moved successfully");
-    };
-
-    const handleApprovalChange = async (
-        stationId: string,
-        newApprovalStatus: string
-    ) => {
-        const isApproved = newApprovalStatus === "approved";
-        const token = localStorage.getItem("userToken");
-
-        if (!token) {
-            alert("Admin-token saknas. Logga in igen.");
-            return;
-        }
-
+    const approveStation = async (stationId: string, isApproved: boolean) => {
+        if (!token) return;
         try {
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/station/${stationId}/approval`,
-                {
-                    method: "PUT",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({ isApproved }),
-                }
+            const { ok, data } = await apiRequest(
+                `/api/station/${stationId}/approve`,
+                "PUT",
+                { isApproved: !isApproved },
+                token
             );
 
-            const data = await response.json();
-            if (response.ok) {
-                console.log("Approval status updated:", data.message);
-            } else {
-                alert(
-                    data.message || "Fel vid uppdatering av godkännandestatus"
+            if (ok && data.success) {
+                setLocalStations((prev) =>
+                    prev.map((s) =>
+                        s.stationId === stationId
+                            ? { ...s, isApproved: !isApproved }
+                            : s
+                    )
                 );
             }
-        } catch (error) {
-            alert("Nätverksfel vid uppdatering av status");
-            console.error("Error:", error);
+        } catch (err) {
+            console.error("❌ Error approving station:", err);
         }
     };
 
-    const filteredStations = stations.filter((station) => {
-        const matchesSearch = station.stationName
-            .toLowerCase()
-            .includes(searchQuery.toLowerCase());
-        const matchesStatus =
-            statusFilter === "all" ||
-            (statusFilter === "online" && station.isApproved) ||
-            (statusFilter === "offline" && !station.isApproved);
-        return matchesSearch && matchesStatus;
-    });
+    useEffect(() => {
+        fetchPaginatedStations();
+    }, [page, searchQuery, limit, stationRefreshKey]);
 
-    const getBuildingName = (buildingId: string) => {
-        const b = buildings.find((b) => b.buildingId === buildingId);
-        return b ? b.buildingName : "—";
+    const handleAddSuccess = () => fetchPaginatedStations();
+    const handleMoveSuccess = () => fetchPaginatedStations();
+    const handleDeleteSuccess = () => fetchPaginatedStations();
+
+    const handleNextPage = () => {
+        if (page < totalPages) setPage((prev) => prev + 1);
+    };
+    const handlePrevPage = () => {
+        if (page > 1) setPage((prev) => prev - 1);
     };
 
-    const normalDate = (dateString: string) => {
-        const date = new Date(dateString);
-        return date.toLocaleDateString("sv-SE", {
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-        });
-    };
-
-    const getTodayCheckInsByStation = (stationId: string) => {
-        const today = new Date().toISOString().split("T")[0];
-        return attendance.filter((a) => {
-            if (!a.checkInTime) return false;
-            const checkInDate = new Date(a.checkInTime)
-                .toISOString()
-                .split("T")[0];
-            return a.stationId === stationId && checkInDate === today;
-        }).length;
-    };
-
+    // ============================================================
+    // 💻 UI
+    // ============================================================
     return (
-        <div className="space-y-6">
-            {/* Header Section */}
-            <div className="flex items-center justify-between">
+        <div className="px-6 py-8 md:px-12 lg:px-20 xl:px-32 space-y-8">
+            {/* Header */}
+            <div className="flex flex-wrap justify-between items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
                         Station Management
                     </h1>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                        Monitor and manage all station locations
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Manage, monitor and organize all station units.
                     </p>
                 </div>
                 <Button
                     onClick={() => setIsAddModalOpen(true)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+                    className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 px-4 py-2 rounded-lg"
                 >
                     <Plus className="w-4 h-4" />
                     Add Station
                 </Button>
             </div>
 
-            {/* Filter Section */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-200 dark:border-gray-700">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="md:col-span-2 relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                        <Input
-                            placeholder="Search stations by name or building..."
-                            className="pl-10 h-11  dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                    </div>
-                    <Select
-                        value={statusFilter}
-                        onValueChange={setStatusFilter}
+            {/* Search & Limit */}
+            <div className="flex flex-wrap gap-4 items-center justify-between">
+                <div className="relative w-full md:w-1/3">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Input
+                        placeholder="Search stations..."
+                        value={searchQuery}
+                        onChange={(e) => {
+                            setSearchQuery(e.target.value);
+                            setPage(1);
+                        }}
+                        className="pl-10 h-11 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-500 dark:text-gray-400">
+                        Rows per page:
+                    </label>
+                    <select
+                        value={limit}
+                        onChange={(e) => {
+                            setLimit(Number(e.target.value));
+                            setPage(1);
+                        }}
+                        className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200"
                     >
-                        <SelectTrigger className="h-11 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                            <SelectValue placeholder="Filter by status" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-lg">
-                            <SelectItem value="all">All Stations</SelectItem>
-                            <SelectItem value="online">Online</SelectItem>
-                            <SelectItem value="offline">Offline</SelectItem>
-                        </SelectContent>
-                    </Select>
+                        {[25, 50, 100, 1000].map((val) => (
+                            <option key={val} value={val}>
+                                {val}
+                            </option>
+                        ))}
+                    </select>
                 </div>
             </div>
 
-            {/* Table Section */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
-                                <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                                    Station Name
-                                </th>
-                                <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                                    Building
-                                </th>
-                                <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                                    Building Status
-                                </th>
-                                <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                                    Today's Check-Ins
-                                </th>
-                                <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                                    Created At
-                                </th>
-                                <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                                    Last activity
-                                </th>
-                                <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                                    Station Approval
-                                </th>
-                                <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider text-right">
-                                    Actions
-                                </th>
+            {/* Table */}
+            <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-900/50">
+                        <tr>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Station Name
+                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Building
+                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Status
+                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Today's Check-ins
+                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Approved
+                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Created At
+                            </th>
+                            <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Actions
+                            </th>
+                        </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {localStations.length === 0 ? (
+                            <tr>
+                                <td
+                                    colSpan={7}
+                                    className="text-center py-10 text-gray-500 dark:text-gray-400"
+                                >
+                                    No stations found.
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {filteredStations.map((station) => (
+                        ) : (
+                            localStations.map((station) => (
                                 <tr
                                     key={station.stationId}
                                     className="hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors"
                                 >
-                                    <td className="py-4 px-6">
+                                    {/* Station name */}
+                                    <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center flex-shrink-0">
+                                            <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
                                                 <Wifi className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                                             </div>
-                                            <div className="min-w-0">
-                                                <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                                            <div>
+                                                <p className="text-sm font-medium text-gray-900 dark:text-white">
                                                     {station.stationName}
                                                 </p>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">
                                                     {station.stationId}
                                                 </p>
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="py-4 px-6">
+
+                                    {/* Building */}
+                                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
                                         <div className="flex items-center gap-2">
-                                            <Building2 className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                                            <span className="text-sm text-gray-700 dark:text-gray-300">
-                                                {getBuildingName(
-                                                    station.buildingId
-                                                )}
-                                            </span>
+                                            <Building2 className="w-4 h-4 text-gray-400" />
+                                            {station.buildingName || "—"}
                                         </div>
                                     </td>
-                                    <td className="py-4 px-6">
-                                        {station.buildingId ? (
-                                            <Badge className="bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 inline-flex items-center gap-1.5 px-2.5 py-1 font-medium border-0">
-                                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                                Connected
+
+                                    {/* Online status */}
+                                    <td className="px-6 py-4">
+                                        {station.isOnline ? (
+                                            <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                                Online
                                             </Badge>
                                         ) : (
-                                            <Badge className="bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/40 inline-flex items-center gap-1.5 px-2.5 py-1 font-medium border-0">
-                                                <XCircle className="w-3.5 h-3.5" />
-                                                Not Connected
+                                            <Badge className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                                                Offline
                                             </Badge>
                                         )}
                                     </td>
-                                    <td className="py-4 px-6">
+
+                                    {/* Today's check-ins */}
+                                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
                                         <div className="flex items-center gap-2">
-                                            <Users className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                                            <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                                {getTodayCheckInsByStation(
-                                                    station.stationId
-                                                )}
-                                            </span>
+                                            <Users className="w-4 h-4 text-gray-400" />
+                                            {station.todayCheckInCount || 0}
                                         </div>
                                     </td>
-                                    <td className="py-4 px-6">
+
+                                    {/* Approved */}
+                                    <td className="px-6 py-4">
+                                        {station.isApproved ? (
+                                            <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                                Approved
+                                            </Badge>
+                                        ) : (
+                                            <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400">
+                                                Pending
+                                            </Badge>
+                                        )}
+                                    </td>
+
+                                    {/* Created */}
+                                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
                                         <div className="flex items-center gap-2">
-                                            <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                                            <span className="text-sm text-gray-700 dark:text-gray-300">
-                                                {normalDate(station.createdAt)}
-                                            </span>
+                                            <Calendar className="w-4 h-4 text-gray-400" />
+                                            {new Date(
+                                                station.createdAt
+                                            ).toLocaleString("sv-SE")}
                                         </div>
                                     </td>
-                                    <td>
-                                        <div className="flex items-center gap-2">
-                                            <span
-                                                className={`w-2 h-2 rounded-full ${
-                                                    station.isOnline
-                                                        ? "bg-green-500"
-                                                        : "bg-red-500"
-                                                }`}
-                                            />
-                                            <div className="text-sm">
-                                                {station.isOnline
-                                                    ? "Online"
-                                                    : "Offline"}
-                                            </div>
-                                            <div className="text-xs text-gray-400">
-                                                {station.lastPing
-                                                    ? new Date(
-                                                          station.lastPing
-                                                      ).toLocaleTimeString()
-                                                    : ""}
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="py-4 px-6">
-                                        <Select
-                                            value={
-                                                station.isApproved
-                                                    ? "approved"
-                                                    : "not-approved"
-                                            }
-                                            onValueChange={(value) =>
-                                                handleApprovalChange(
-                                                    station.stationId,
-                                                    value
-                                                )
-                                            }
-                                        >
-                                            <SelectTrigger className="w-40 h-9 bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium">
-                                                <SelectValue placeholder="Välj status" />
-                                            </SelectTrigger>
-                                            <SelectContent className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-lg">
-                                                <SelectItem value="approved">
-                                                    <div className="flex items-center gap-2">
-                                                        <CheckCircle2 className="w-4 h-4 text-green-600" />
-                                                        <span>Activ</span>
-                                                    </div>
-                                                </SelectItem>
-                                                <SelectItem value="not-approved">
-                                                    <div className="flex items-center gap-2">
-                                                        <XCircle className="w-4 h-4 text-red-600" />
-                                                        <span>Inactiv</span>
-                                                    </div>
-                                                </SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </td>
-                                    <td className="py-4 px-6 text-right">
+
+                                    {/* Actions */}
+                                    <td className="px-6 py-4 text-right">
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
                                                 <Button
                                                     variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8 p-0 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                                                    className="h-8 w-8 p-0"
                                                 >
-                                                    <MoreVertical className="h-4 w-4" />
+                                                    <MoreVertical className="w-4 h-4" />
                                                 </Button>
                                             </DropdownMenuTrigger>
-
                                             <DropdownMenuContent
                                                 align="end"
                                                 className="w-44 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-md"
                                             >
                                                 <DropdownMenuItem
                                                     onClick={() =>
-                                                        handleMoveStation(
-                                                            station
+                                                        approveStation(
+                                                            station.stationId,
+                                                            station.isApproved
                                                         )
                                                     }
                                                     className={`cursor-pointer flex items-center ${
-                                                        station.buildingId
+                                                        station.isApproved
+                                                            ? "text-yellow-600 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/20"
+                                                            : "text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20"
+                                                    }`}
+                                                >
+                                                    {station.isApproved ? (
+                                                        <>
+                                                            <XCircle className="w-4 h-4 mr-2" />
+                                                            Unapprove
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                                                            Approve
+                                                        </>
+                                                    )}
+                                                </DropdownMenuItem>
+
+                                                <DropdownMenuItem
+                                                    onClick={() => {
+                                                        setSelectedStation(
+                                                            station
+                                                        );
+                                                        setIsMoveModalOpen(
+                                                            true
+                                                        );
+                                                    }}
+                                                    className={`cursor-pointer flex items-center transition-colors ${
+                                                        station.buildingName
                                                             ? "text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
                                                             : "text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                                                     }`}
                                                 >
-                                                    <Link2 className="w-4 h-4 mr-2" />
-                                                    {station.buildingId
-                                                        ? "Disconnect"
-                                                        : "Connect to building"}
+                                                    {station.buildingName ? (
+                                                        <>
+                                                            <Link2 className="w-4 h-4 mr-2 rotate-45" />
+                                                            Disconnect
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Link2 className="w-4 h-4 mr-2" />
+                                                            Connect
+                                                        </>
+                                                    )}
                                                 </DropdownMenuItem>
 
                                                 <DropdownMenuItem
@@ -400,9 +371,32 @@ export default function StationsPage() {
                                         </DropdownMenu>
                                     </td>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            ))
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="flex justify-between items-center mt-6">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Page {page} of {totalPages} — {total} stations
+                </p>
+                <div className="flex gap-2">
+                    <Button
+                        variant="outline"
+                        disabled={page === 1}
+                        onClick={handlePrevPage}
+                    >
+                        <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+                    </Button>
+                    <Button
+                        variant="outline"
+                        disabled={page === totalPages}
+                        onClick={handleNextPage}
+                    >
+                        Next <ChevronRight className="w-4 h-4 ml-1" />
+                    </Button>
                 </div>
             </div>
 
@@ -410,7 +404,7 @@ export default function StationsPage() {
             <AddStationModal
                 isOpen={isAddModalOpen}
                 onClose={() => setIsAddModalOpen(false)}
-                onSuccess={handleBuildingAdded}
+                onSuccess={handleAddSuccess}
             />
 
             <MoveStationModal
@@ -420,13 +414,12 @@ export default function StationsPage() {
                 buildings={buildings}
                 onSuccess={handleMoveSuccess}
             />
+
             <DeleteStationModal
                 isOpen={isDeleteModalOpen}
                 onClose={() => setIsDeleteModalOpen(false)}
                 station={stationToDelete}
-                onSuccess={(deletedId) => {
-                    console.log("Deleted:", deletedId);
-                }}
+                onSuccess={handleDeleteSuccess}
             />
         </div>
     );

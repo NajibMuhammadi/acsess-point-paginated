@@ -1,23 +1,21 @@
 import express from "express";
+import { authRole } from "../middleware/authRole.js";
 import {
     createBuilding,
+    getAllBuildings,
     deleteBuilding,
-    getAllStationsAndBuildings,
-    getBuildingDetails,
+    getAllBuildingsUnpaginated,
 } from "../controllers/buildingController.js";
-
-import { authRole } from "../middleware/authRole.js";
 
 const router = express.Router();
 
-router.post("/create-building", authRole("admin"), createBuilding);
-router.get("/:buildingId/details", authRole("admin"), getBuildingDetails);
-router.delete("/:buildingId", authRole("admin"), deleteBuilding);
-
+router.post("/create", authRole("admin"), createBuilding);
+router.get("/paginated", authRole("admin", "firestation"), getAllBuildings);
 router.get(
-    "/all",
+    "/unpaginated",
     authRole("admin", "firestation"),
-    getAllStationsAndBuildings
+    getAllBuildingsUnpaginated
 );
+router.delete("/:buildingId", authRole("admin"), deleteBuilding);
 
 export default router;

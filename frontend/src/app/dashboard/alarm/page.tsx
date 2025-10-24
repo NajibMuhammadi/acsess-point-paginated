@@ -3,216 +3,327 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAdminData } from "@/app/dashboard/layout";
+import { apiRequest } from "@/utils/api";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
-    AlertTriangle,
     Search,
-    MessageCircleWarning,
     FlameKindling,
+    MessageCircleWarning,
     FlaskConical,
+    AlertTriangle,
+    ChevronLeft,
+    ChevronRight,
+    MoreVertical,
+    Eye,
 } from "lucide-react";
+import {
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 
 function getUserToken() {
     return localStorage.getItem("userToken");
 }
 
 export default function AlarmCenterPage() {
-    const { alarms } = useAdminData(); // 👈 Realtidsdata via AdminLayout
-    const [localAlarms, setLocalAlarms] = useState<any[]>([]); // 👈 Första laddning
-    const [searchQuery, setSearchQuery] = useState("");
-    const [loading, setLoading] = useState(true);
+    const { socket } = useAdminData();
     const router = useRouter();
+    const [alarms, setAlarms] = useState<any[]>([]);
+    const [search, setSearch] = useState("");
+    const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(25);
+    const [totalPages, setTotalPages] = useState(1);
+    const [total, setTotal] = useState(0);
+    const [loading, setLoading] = useState(true);
 
-    // 🔹 Hämta alla larm från backend (initialt)
+    const token = typeof window !== "undefined" ? getUserToken() : null;
+
+    // ============================================================
+    // 🔹 Hämta alarm med pagination
+    // ============================================================
+    const fetchAlarms = async () => {
+        if (!token) return;
+        setLoading(true);
+
+        const { ok, data } = await apiRequest(
+            `/api/alarm/paginated?page=${page}&limit=${limit}&search=${encodeURIComponent(
+                search
+            )}`,
+            "GET",
+            null,
+            token
+        );
+
+        if (ok && data.success) {
+            setAlarms(data.alarms || []);
+            setTotalPages(data.totalPages || 1);
+            setTotal(data.total || 0);
+        } else {
+            console.error("❌ Failed to fetch alarms:", data?.message);
+        }
+
+        setLoading(false);
+    };
+
     useEffect(() => {
-        const fetchAlarms = async () => {
-            const token = getUserToken();
-            if (!token) return console.warn("Ingen token hittad");
+        fetchAlarms();
+    }, [page, limit, search]);
 
-            try {
-                const res = await fetch(
-                    `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/alarm/all`,
-                    {
-                        headers: { Authorization: `Bearer ${token}` },
-                        credentials: "include",
-                    }
-                );
-                const data = await res.json();
-                if (data.success) {
-                    const sorted = data.alarms.sort(
-                        (a: any, b: any) =>
-                            new Date(b.createdAt).getTime() -
-                            new Date(a.createdAt).getTime()
-                    );
-                    setLocalAlarms(sorted);
-                }
-            } catch (err) {
-                console.error("❌ Error fetching alarms:", err);
-            } finally {
-                setLoading(false);
-            }
+    // ============================================================
+    // ⚡ Realtidsuppdateringar
+    // ============================================================
+    useEffect(() => {
+        if (!socket) return;
+
+        const handleAlarmTriggered = (newAlarm: any) => {
+            setAlarms((prev) => [newAlarm, ...prev]);
         };
 
-        fetchAlarms();
-    }, []);
+        const handleAlarmAcknowledged = (updated: any) => {
+            setAlarms((prev) =>
+                prev.map((a) =>
+                    a.alarmId === updated.alarmId
+                        ? {
+                              ...a,
+                              acknowledged: true,
+                              acknowledgedAt: updated.acknowledgedAt,
+                              acknowledgedBy: updated.acknowledgedBy,
+                          }
+                        : a
+                )
+            );
+        };
 
-    // 🧠 Kombinera initial data + realtidsdata
-    const mergedAlarms = [...alarms, ...localAlarms].reduce((acc, alarm) => {
-        if (!acc.some((a: any) => a.alarmId === alarm.alarmId)) acc.push(alarm);
-        return acc;
-    }, [] as any[]);
+        socket.on("alarmTriggered", handleAlarmTriggered);
+        socket.on("alarmAcknowledged", handleAlarmAcknowledged);
 
-    // 🔍 Filtrera efter sökning
-    const filteredAlarms = mergedAlarms.filter(
-        (a: any) =>
-            a.buildingName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            a.message?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+        return () => {
+            socket.off("alarmTriggered", handleAlarmTriggered);
+            socket.off("alarmAcknowledged", handleAlarmAcknowledged);
+        };
+    }, [socket]);
 
-    // 📊 Statistik
-    const activeAlarms = mergedAlarms.filter(
-        (a: any) => !a.acknowledged
-    ).length;
-    const totalAlarms = mergedAlarms.length;
-
-    // 🔔 Ikoner
+    // ============================================================
+    // 🔥 Hjälpfunktion för ikon
+    // ============================================================
     const getAlarmIcon = (type: number) => {
         switch (type) {
             case 1:
                 return (
-                    <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
-                        <MessageCircleWarning className="w-5 h-5 text-amber-500" />
-                    </div>
+                    <MessageCircleWarning className="w-5 h-5 text-amber-500" />
                 );
             case 2:
-                return (
-                    <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
-                        <FlameKindling className="w-5 h-5 text-red-500" />
-                    </div>
-                );
+                return <FlameKindling className="w-5 h-5 text-red-500" />;
             case 3:
-                return (
-                    <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
-                        <FlaskConical className="w-5 h-5 text-green-500" />
-                    </div>
-                );
+                return <FlaskConical className="w-5 h-5 text-green-500" />;
             default:
-                return (
-                    <div className="w-8 h-8 rounded-full bg-gray-300/20 flex items-center justify-center">
-                        <AlertTriangle className="w-5 h-5 text-gray-500" />
-                    </div>
-                );
+                return <AlertTriangle className="w-5 h-5 text-gray-500" />;
         }
     };
 
-    // 🖼️ UI
-    if (loading) {
-        return (
-            <div className="flex justify-center py-10">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-600"></div>
-            </div>
-        );
-    }
+    // ============================================================
+    // Pagination
+    // ============================================================
+    const handleNextPage = () => {
+        if (page < totalPages) setPage(page + 1);
+    };
+    const handlePrevPage = () => {
+        if (page > 1) setPage(page - 1);
+    };
 
+    // ============================================================
+    // 💻 UI
+    // ============================================================
     return (
-        <div className="space-y-6">
+        <div className="px-6 py-8 md:px-12 lg:px-20 xl:px-32 space-y-8">
             {/* Header */}
-            <div className="flex flex-wrap justify-between items-start gap-4">
+            <div className="flex flex-wrap justify-between items-center gap-4">
                 <div>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
                         Alarm Center
+                    </h1>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Monitor and manage all alarms in real-time.
                     </p>
-                    <p className="text-gray-500 dark:text-gray-400 text-sm">
-                        Monitor and manage all alarms in real time
-                    </p>
-                </div>
-
-                <div className="flex flex-wrap gap-3">
-                    <div className="flex flex-col gap-1 rounded-lg p-4 bg-white dark:bg-gray-800/50 shadow-sm min-w-[130px]">
-                        <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">
-                            Total Alarms
-                        </p>
-                        <p className="text-gray-900 dark:text-white text-xl font-semibold">
-                            {totalAlarms}
-                        </p>
-                    </div>
-                    <div className="flex flex-col gap-1 rounded-lg p-4 bg-white dark:bg-gray-800/50 shadow-sm min-w-[130px]">
-                        <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">
-                            Active Alarms
-                        </p>
-                        <p className="text-red-600 dark:text-red-400 text-xl font-semibold">
-                            {activeAlarms}
-                        </p>
-                    </div>
                 </div>
             </div>
 
-            {/* Sökfält */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-200 dark:border-gray-700">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="md:col-span-2 relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                        <Input
-                            placeholder="Search alarms by building or message..."
-                            className="pl-10 h-11 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                    </div>
+            {/* Search & Limit */}
+            <div className="flex flex-wrap gap-4 items-center justify-between">
+                <div className="relative w-full md:w-1/3">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Input
+                        placeholder="Search by building or message..."
+                        value={search}
+                        onChange={(e) => {
+                            setPage(1);
+                            setSearch(e.target.value);
+                        }}
+                        className="pl-10 h-11 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
                 </div>
-            </div>
 
-            {/* Larmkort */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredAlarms.map((alarm: any) => (
-                    <div
-                        key={alarm.alarmId}
-                        className="flex flex-col gap-3 rounded-lg p-4 bg-white dark:bg-gray-800/50 shadow-sm hover:shadow-md transition-shadow duration-200 cursor-pointer"
-                        onClick={() =>
-                            router.push(`/dashboard/alarm/${alarm.alarmId}`)
-                        }
+                <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-500 dark:text-gray-400">
+                        Rows per page:
+                    </label>
+                    <select
+                        value={limit}
+                        onChange={(e) => {
+                            setLimit(Number(e.target.value));
+                            setPage(1);
+                        }}
+                        className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200"
                     >
-                        <div className="flex items-center gap-3">
-                            {getAlarmIcon(alarm.alarmType)}
-                            <p className="text-base font-semibold text-gray-900 dark:text-white">
-                                {alarm.buildingName}
-                            </p>
-                        </div>
+                        {[25, 50, 100, 1000].map((val) => (
+                            <option key={val} value={val}>
+                                {val}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            </div>
 
-                        <p className="text-gray-600 dark:text-gray-300 text-sm line-clamp-2">
-                            {alarm.message}
-                        </p>
+            {/* Table */}
+            <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-900/50">
+                        <tr>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Type
+                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Building
+                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Message
+                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Created At
+                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                People
+                            </th>
+                            <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Actions
+                            </th>
+                        </tr>
+                    </thead>
 
-                        <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400">
-                            <span>
-                                {new Date(alarm.createdAt).toLocaleString(
-                                    "sv-SE"
-                                )}
-                            </span>
-                            <span>
-                                {alarm.totalPeople ?? 0}{" "}
-                                {alarm.totalPeople === 1 ? "person" : "people"}{" "}
-                                affected
-                            </span>
-                        </div>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {loading ? (
+                            <tr>
+                                <td
+                                    colSpan={6}
+                                    className="text-center py-10 text-gray-500 dark:text-gray-400"
+                                >
+                                    Loading alarms...
+                                </td>
+                            </tr>
+                        ) : alarms.length === 0 ? (
+                            <tr>
+                                <td
+                                    colSpan={6}
+                                    className="text-center py-10 text-gray-500 dark:text-gray-400"
+                                >
+                                    No alarms found.
+                                </td>
+                            </tr>
+                        ) : (
+                            alarms.map((alarm) => (
+                                <tr
+                                    key={alarm.alarmId}
+                                    className="hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors"
+                                >
+                                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                                        <div className="flex items-center gap-2">
+                                            {getAlarmIcon(alarm.alarmType)}
+                                            <span>
+                                                {alarm.alarmType === 1
+                                                    ? "General"
+                                                    : alarm.alarmType === 2
+                                                    ? "Fire"
+                                                    : alarm.alarmType === 3
+                                                    ? "Gas"
+                                                    : "Unknown"}
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
+                                        {alarm.buildingName || "—"}
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400 line-clamp-1">
+                                        {alarm.message || "—"}
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                                        {new Date(
+                                            alarm.createdAt
+                                        ).toLocaleString("sv-SE")}
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                                        {alarm.totalPeople ?? 0}
+                                    </td>
 
-                        <div className="flex justify-between items-center mt-1">
-                            <span
-                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                    alarm.acknowledged
-                                        ? "bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200"
-                                        : "bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200"
-                                }`}
-                            >
-                                {alarm.acknowledged ? "Acknowledged" : "Active"}
-                            </span>
+                                    {/* 🔹 3-pricksmenyn */}
+                                    <td className="px-6 py-4 text-right">
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    className="h-8 w-8 p-0"
+                                                >
+                                                    <MoreVertical className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent
+                                                align="end"
+                                                className="w-40 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-md"
+                                            >
+                                                <DropdownMenuItem
+                                                    onClick={() =>
+                                                        router.push(
+                                                            `/dashboard/alarm/${alarm.alarmId}`
+                                                        )
+                                                    }
+                                                    className="cursor-pointer text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-900/20 flex items-center"
+                                                >
+                                                    <Eye className="w-4 h-4 mr-2" />
+                                                    View Details
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                </table>
+            </div>
 
-                            <button className="text-primary font-semibold text-sm hover:underline">
-                                View Details
-                            </button>
-                        </div>
-                    </div>
-                ))}
+            {/* Pagination Controls */}
+            <div className="flex justify-between items-center mt-6">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Page {page} of {totalPages} — {total} alarms
+                </p>
+                <div className="flex gap-2">
+                    <Button
+                        variant="outline"
+                        disabled={page === 1}
+                        onClick={handlePrevPage}
+                    >
+                        <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+                    </Button>
+                    <Button
+                        variant="outline"
+                        disabled={page === totalPages}
+                        onClick={handleNextPage}
+                    >
+                        Next <ChevronRight className="w-4 h-4 ml-1" />
+                    </Button>
+                </div>
             </div>
         </div>
     );

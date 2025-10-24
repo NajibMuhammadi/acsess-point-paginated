@@ -1,5 +1,4 @@
 "use client";
-
 import { useState, useEffect, createContext, useContext } from "react";
 import { jwtDecode } from "jwt-decode";
 import { io as clientIO } from "socket.io-client";
@@ -7,6 +6,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { apiRequest } from "@/utils/api";
 import AccessDenied from "@/components/accessDenied/page";
 import LoadingScreen from "@/components/dashboardLoading/page";
+import { SocketProvider } from "@/context/SocketContext";
 
 interface UserData {
     userId: string;
@@ -19,24 +19,38 @@ interface UserData {
     createdAt?: string;
     lastLogin?: string;
 }
+
 interface DecodedUser extends UserData {
     exp: number;
 }
 
-// 👇 Context för att alla undersidor ska kunna läsa buildings, stations, attendance
 interface AdminContextType {
     userData: UserData | null;
+    socket: any | null;
     buildings: any[];
     stations: any[];
-    attendance: any[];
     visitors: any[];
     alarms: any[];
+    stationRefreshKey: number;
+    alarmRefreshKey: number;
+    weeklyData: any[];
+    recentAttendance: any[];
+    dashboardStats: {
+        totalBuildings: number;
+        totalStations: number;
+        activeStations: number;
+        onlineStations: number;
+        currentlyCheckedIn: number;
+    };
 }
+
 const AdminContext = createContext<AdminContextType | null>(null);
 export const useAdminData = () => useContext(AdminContext)!;
 
 function getUserToken() {
-    return localStorage.getItem("userToken");
+    return typeof window !== "undefined"
+        ? localStorage.getItem("userToken")
+        : null;
 }
 
 function decodeToken(token: string | null): DecodedUser | null {
@@ -58,220 +72,247 @@ export default function AdminLayout({
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [userData, setUserData] = useState<UserData | null>(null);
     const [loading, setLoading] = useState(true);
-
     const [buildings, setBuildings] = useState<any[]>([]);
     const [stations, setStations] = useState<any[]>([]);
-    const [attendance, setAttendance] = useState<any[]>([]);
     const [visitors, setVisitors] = useState<any[]>([]);
-    const [socket, setSocket] = useState<any | null>(null);
     const [alarms, setAlarms] = useState<any[]>([]);
+    const [socket, setSocket] = useState<any | null>(null);
+    const [stationRefreshKey, setStationRefreshKey] = useState(0);
+    const [alarmRefreshKey, setAlarmRefreshKey] = useState(0);
+    const [weeklyData, setWeeklyData] = useState<any[]>([]);
+    const [recentAttendance, setRecentAttendance] = useState<any[]>([]);
+
+    const [dashboardStats, setDashboardStats] = useState({
+        totalBuildings: 0,
+        totalStations: 0,
+        activeStations: 0,
+        onlineStations: 0,
+        currentlyCheckedIn: 0,
+    });
 
     useEffect(() => {
         const token = getUserToken();
         const decoded = decodeToken(token);
-
         if (!decoded || !token) {
             setLoading(false);
             return;
         }
         setUserData(decoded);
-        console.log("User data decoded:", decoded);
         setIsLoggedIn(true);
+        let s: any;
 
         async function init() {
-            if (!token) return;
-
-            const decoded = decodeToken(token);
-            if (!decoded) return;
-
-            await fetchUserProfile(token);
-            await fetchAllBuildingData(token);
-            await setupSocketConnection(token, decoded.companyId);
+            try {
+                if (!token || !decoded) return;
+                await Promise.all([
+                    fetchUserProfile(token),
+                    fetchAllBuildings(token),
+                    fetchDashboardData(token),
+                    fetchAllStations(token),
+                    fetchAllAlarms(token),
+                ]);
+                s = await setupSocketConnection(token, decoded.companyId);
+                setSocket(s);
+            } catch (err) {
+                console.error("❌ Init error:", err);
+            } finally {
+                setLoading(false);
+            }
         }
+        init();
 
-        init().finally(() => setLoading(false));
-
-        return () => socket?.disconnect();
+        return () => {
+            if (s) s.disconnect();
+        };
     }, []);
 
-    async function fetchAllBuildingData(token: string) {
-        try {
-            const { ok, data } = await apiRequest(
-                "/api/building/all",
-                "GET",
-                undefined,
-                token
-            );
-
-            if (ok && data.success) {
-                setBuildings(data.buildings || []);
-                setStations(data.stations || []);
-                setAttendance(data.attendances || []);
-                setVisitors(data.visitors || []);
-            } else {
-                console.error("Failed to fetch building data:", data.message);
-            }
-        } catch (error) {
-            console.error("Error fetching building data:", error);
-        }
+    async function fetchUserProfile(token: string) {
+        const { ok, data } = await apiRequest(
+            "/api/admin/profile",
+            "GET",
+            undefined,
+            token
+        );
+        if (ok && data.success) setUserData(data.user);
     }
 
-    async function fetchUserProfile(token: string) {
-        try {
-            const { ok, data } = await apiRequest(
-                "/api/admin/profile",
-                "GET",
-                undefined,
-                token
+    async function fetchAllBuildings(token: string) {
+        const { ok, data } = await apiRequest(
+            "/api/building/unpaginated",
+            "GET",
+            undefined,
+            token
+        );
+        if (ok && data.success) setBuildings(data.buildings || []);
+    }
+
+    async function fetchAllStations(token: string) {
+        const { ok, data } = await apiRequest(
+            "/api/station/allunpaginated",
+            "GET",
+            undefined,
+            token
+        );
+        if (ok && data.success) setStations(data.stations || []);
+    }
+
+    async function fetchAllAlarms(token: string) {
+        const { ok, data } = await apiRequest(
+            "/api/alarm/paginated?page=1&limit=25",
+            "GET",
+            undefined,
+            token
+        );
+        if (ok && data.success) setAlarms(data.alarms || []);
+    }
+
+    // 🟢 Konsoliderad funktion för all dashboard-data
+    async function fetchDashboardData(token: string) {
+        const { ok, data } = await apiRequest(
+            "/api/attendance/today",
+            "GET",
+            undefined,
+            token
+        );
+        if (ok && data.success) {
+            setWeeklyData(data.data || []);
+            setRecentAttendance(data.recentAttendance || []);
+            setDashboardStats(
+                data.stats || {
+                    totalBuildings: 0,
+                    totalStations: 0,
+                    activeStations: 0,
+                    onlineStations: 0,
+                    currentlyCheckedIn: 0,
+                }
             );
-            if (ok && data.success) {
-                console.log("✅ Real user profile fetched:", data.user);
-                setUserData(data.user);
-            }
-        } catch (error) {
-            console.error("❌ Error fetching user profile:", error);
         }
     }
 
     async function setupSocketConnection(token: string, companyId?: string) {
-        const decoded = decodeToken(token);
-        if (!decoded) return;
+        if (!process.env.NEXT_PUBLIC_API_BASE_URL) {
+            console.error("❌ NEXT_PUBLIC_API_BASE_URL saknas i .env");
+            return null;
+        }
+
         const s = clientIO(process.env.NEXT_PUBLIC_API_BASE_URL!, {
             transports: ["websocket"],
             auth: { token },
         });
 
         s.on("connect", () => {
-            console.log("🔌 Socket ansluten");
+            console.log("🔌 Socket ansluten:", s.id);
             if (companyId) s.emit("joinCompany", { companyId });
         });
 
-        s.on("buildingCreated", (building: any) => {
-            setBuildings((prev) => [...prev, building]);
+        // 🏢 Building events
+        s.on("buildingCreated", (b: any) => {
+            setBuildings((prev) => [...prev, b]);
         });
 
-        s.on("stationCreated", (station: any) => {
-            setStations((prev) => [...prev, station]);
-        });
-
-        s.on("stationMoved", ({ stationId, buildingId }: any) => {
+        s.on("buildingDeleted", ({ buildingId }: any) => {
+            setBuildings((prev) =>
+                prev.filter((b) => b.buildingId !== buildingId)
+            );
             setStations((prev) =>
-                prev.map((s) =>
-                    s.stationId === stationId ? { ...s, buildingId } : s
+                prev.map((st) =>
+                    st.buildingId === buildingId
+                        ? { ...st, buildingId: null }
+                        : st
                 )
             );
         });
+
+        // 📡 Station events
+        s.on("stationCreated", (st: any) => {
+            setStations((prev) => [...prev, st]);
+            setStationRefreshKey((x) => x + 1);
+        });
+
+        s.on("stationDeleted", ({ stationId }: any) => {
+            setStations((prev) =>
+                prev.filter((st) => st.stationId !== stationId)
+            );
+            setStationRefreshKey((x) => x + 1);
+        });
+
+        s.on("stationMoved", ({ stationId, buildingId, buildingName }: any) => {
+            setStations((prev) =>
+                prev.map((st) =>
+                    st.stationId === stationId
+                        ? {
+                              ...st,
+                              buildingId: buildingId || null,
+                              buildingName,
+                          }
+                        : st
+                )
+            );
+            setStationRefreshKey((x) => x + 1);
+        });
+
         s.on("stationApprovalUpdated", ({ stationId, isApproved }: any) => {
-            console.log("⚡ stationApprovalUpdated:", stationId, isApproved);
-
             setStations((prev) =>
-                prev.map((station) =>
-                    station.stationId === stationId
-                        ? { ...station, isApproved }
-                        : station
+                prev.map((st) =>
+                    st.stationId === stationId ? { ...st, isApproved } : st
                 )
             );
-        });
-
-        s.on("visitorCreated", (visitor: any) => {
-            setVisitors((prev) => [...prev, visitor]);
-        });
-
-        s.on("attendanceUpdated", (newAttendance: any) => {
-            setAttendance((prev) => {
-                const exists = prev.some(
-                    (a) => a.attendanceId === newAttendance.attendanceId
-                );
-                if (exists) {
-                    return prev.map((a) =>
-                        a.attendanceId === newAttendance.attendanceId
-                            ? newAttendance
-                            : a
-                    );
-                }
-                return [newAttendance, ...prev];
-            });
+            setStationRefreshKey((x) => x + 1);
         });
 
         s.on("stationStatusUpdated", (data: any) => {
             setStations((prev) =>
-                prev.map((s) =>
-                    s.stationId === data.stationId
+                prev.map((st) =>
+                    st.stationId === data.stationId
                         ? {
-                              ...s,
+                              ...st,
                               isOnline: data.isOnline,
                               lastPing: data.lastPing,
                           }
-                        : s
+                        : st
                 )
             );
+            setStationRefreshKey((x) => x + 1);
         });
 
-        s.on("buildingDeleted", (data: { buildingId: string }) => {
-            console.log("🏢 Building deleted:", data.buildingId);
-            setBuildings((prev) =>
-                prev.filter((b) => b.buildingId !== data.buildingId)
-            );
+        // 🚨 Alarm events
+        s.on("alarmTriggered", (alarm: any) => {
+            setAlarms((prev) => [alarm, ...prev]);
+            setAlarmRefreshKey((x) => x + 1);
         });
 
-        s.on("alarmTriggered", (newAlarm) => {
-            console.log("🚨 Nytt larm mottaget:", newAlarm);
-            setAlarms((prev) => [
-                {
-                    ...newAlarm,
-                    createdAt: new Date().toISOString(),
-                    acknowledged: false,
-                },
-                ...prev,
-            ]);
-        });
-        s.on("alarmAcknowledged", (data) => {
-            console.log("🔔 Larm kvitterades i realtid:", data);
-
-            // Uppdatera lokala larmlistan
+        s.on("alarmAcknowledged", (data: any) => {
             setAlarms((prev) =>
                 prev.map((a) =>
                     a.alarmId === data.alarmId
                         ? {
                               ...a,
                               acknowledged: true,
-                              acknowledgedAt: data.acknowledgedAt,
                               acknowledgedBy: data.acknowledgedBy,
+                              acknowledgedAt: data.acknowledgedAt,
                           }
                         : a
                 )
             );
+            setAlarmRefreshKey((x) => x + 1);
         });
-        s.on("buildingDeleted", (data: { buildingId: string }) => {
-            console.log("🏢 Building deleted (realtime):", data.buildingId);
 
-            setBuildings((prev) =>
-                prev.filter((b) => b.buildingId !== data.buildingId)
-            );
-
-            // Ta även bort alla stationer kopplade till byggnaden
-            setStations((prev) =>
-                prev.map((s) =>
-                    s.buildingId === data.buildingId
-                        ? { ...s, buildingId: null }
-                        : s
-                )
-            );
+        // 📊 Dashboard stats events
+        s.on("weeklyTrendsUpdated", (data: any[]) => {
+            setWeeklyData(data);
         });
-        s.on(
-            "stationDeleted",
-            (data: { stationId: string; buildingId?: string }) => {
-                console.log("🗑️ Station deleted (realtime):", data.stationId);
 
-                setStations((prev) =>
-                    prev.filter((s) => s.stationId !== data.stationId)
-                );
-            }
-        );
-        setSocket(s);
+        s.on("recentAttendanceUpdated", (recent: any[]) => {
+            setRecentAttendance(recent);
+        });
+
+        s.on("dashboardStatsUpdated", (stats: any) => {
+            setDashboardStats(stats);
+        });
+
+        return s;
     }
 
-    // --- Logout ---
     const handleLogout = () => {
         socket?.disconnect();
         localStorage.removeItem("userToken");
@@ -283,19 +324,29 @@ export default function AdminLayout({
     if (!isLoggedIn) return <AccessDenied />;
 
     return (
-        <AdminContext.Provider
-            value={{
-                userData,
-                buildings,
-                stations,
-                attendance,
-                visitors,
-                alarms,
-            }}
-        >
-            <DashboardLayout userData={userData} handleLogout={handleLogout}>
-                {children}
-            </DashboardLayout>
-        </AdminContext.Provider>
+        <SocketProvider>
+            <AdminContext.Provider
+                value={{
+                    userData,
+                    socket,
+                    buildings,
+                    stations,
+                    visitors,
+                    alarms,
+                    stationRefreshKey,
+                    alarmRefreshKey,
+                    weeklyData,
+                    recentAttendance,
+                    dashboardStats,
+                }}
+            >
+                <DashboardLayout
+                    userData={userData}
+                    handleLogout={handleLogout}
+                >
+                    {children}
+                </DashboardLayout>
+            </AdminContext.Provider>
+        </SocketProvider>
     );
 }

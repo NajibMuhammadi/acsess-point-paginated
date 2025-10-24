@@ -42,7 +42,7 @@ export default function AdminRegisterPage() {
 
         try {
             const { ok, data } = await apiRequest(
-                "/api/admin/register",
+                "/api/user/register",
                 "POST",
                 formData
             );

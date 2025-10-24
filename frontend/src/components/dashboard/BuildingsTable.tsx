@@ -27,7 +27,7 @@ export const BuildingsTable = ({
 }: {
     buildings: Building[];
     stations: Station[];
-    attendance: Attendance[];
+    attendance?: Attendance[];
     isAdmin: boolean;
 }) => {
     return (
@@ -54,16 +54,6 @@ export const BuildingsTable = ({
                                     (s) => s.buildingId === building.buildingId
                                 );
 
-                                const buildingAttendance = attendance.filter(
-                                    (a) =>
-                                        a.buildingId === building.buildingId &&
-                                        !a.checkOutTime
-                                );
-
-                                const buildingOccupancy =
-                                    buildingAttendance.length;
-                                const capacity = 100;
-
                                 return (
                                     <tr
                                         key={building.buildingId}
@@ -75,9 +65,9 @@ export const BuildingsTable = ({
                                         <td className="p-4">
                                             {building.address || "No address"}
                                         </td>
-                                        <td className="p-4">
+                                        {/* <td className="p-4">
                                             {buildingOccupancy} / {capacity}
-                                        </td>
+                                        </td> */}
                                         {isAdmin && (
                                             <td className="p-4">
                                                 {buildingStations.length} / 20

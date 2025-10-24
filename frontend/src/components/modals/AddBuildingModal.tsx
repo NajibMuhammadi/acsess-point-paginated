@@ -72,7 +72,7 @@ export const AddBuildingModal = ({
 
         try {
             const { ok, data } = await apiRequest(
-                "/api/building/create-building",
+                "/api/building/create",
                 "POST",
                 { buildingName },
                 token

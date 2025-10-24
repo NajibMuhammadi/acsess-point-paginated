@@ -1,5 +1,4 @@
 import jwt from "jsonwebtoken";
-import { getCompaniesCollection } from "../config/db.js";
 
 export function authRole(...allowedRoles) {
     return async (req, res, next) => {
@@ -13,54 +12,27 @@ export function authRole(...allowedRoles) {
             }
 
             const token = authHeader.split(" ")[1];
-
             const decoded = jwt.verify(
                 token,
                 process.env.JWT_SECRET || "fallback-secret-key"
             );
 
-            // 3️⃣ Hämta företag och användare
-            const companiesCol = getCompaniesCollection();
-            const company = await companiesCol.findOne({
-                _id: decoded.companyId,
-                "users.userId": decoded.userId,
-            });
-
-            if (!company)
-                return res.status(401).json({
-                    success: false,
-                    message: "Företag eller användare hittades inte",
-                });
-
-            const user = company.users.find((u) => u.userId === decoded.userId);
-            if (!user)
-                return res.status(401).json({
-                    success: false,
-                    message: "Användaren hittades inte",
-                });
-
-            // 4️⃣ Roll- och statuskontroller
-            if (user.role === "firestation" && !user.isApproved)
-                return res.status(403).json({
-                    success: false,
-                    message:
-                        "Detta konto är inte godkänt av en administratör ännu.",
-                });
-
-            if (allowedRoles.length && !allowedRoles.includes(user.role))
+            // 🔹 Kontrollera roller
+            if (allowedRoles.length && !allowedRoles.includes(decoded.role)) {
                 return res.status(403).json({
                     success: false,
                     message: "Otillräckliga rättigheter",
                 });
+            }
 
-            // 5️⃣ Lägg användardata på request
+            // 🔹 Lägg decoded data direkt på req.user
             req.user = {
-                userId: user.userId,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                companyId: company._id,
-                companyName: company.companyName,
+                userId: decoded.userId,
+                email: decoded.email,
+                name: decoded.name,
+                role: decoded.role,
+                companyId: decoded.companyId,
+                companyName: decoded.companyName || "Unknown",
             };
 
             next();
@@ -68,10 +40,9 @@ export function authRole(...allowedRoles) {
             console.error("Auth error:", error.message);
 
             if (error.name === "JsonWebTokenError")
-                return res.status(401).json({
-                    success: false,
-                    message: "Ogiltig token",
-                });
+                return res
+                    .status(401)
+                    .json({ success: false, message: "Ogiltig token" });
 
             if (error.name === "TokenExpiredError")
                 return res.status(401).json({
