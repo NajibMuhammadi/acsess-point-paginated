@@ -10,22 +10,14 @@ import { Building2, Users, Radio, Network } from "lucide-react";
 export default function AdminPage() {
     const {
         userData,
-        buildings,
-        stations,
         visitors,
         weeklyData,
+        buildings,
         recentAttendance,
         dashboardStats,
+        lastestBuildings,
     } = useAdminData();
 
-    console.log("🕐 Recent Attendance in AdminPage:", dashboardStats);
-
-    const totalBuildings = buildings.length;
-    const activeStations = stations.filter((s) => s.buildingId);
-    const totalStations = stations.length;
-
-    // 🔹 Omvandla recentAttendance till rätt format för RecentActivity-komponenten
-    // 🟢 Transformera attendance till separata check-in och check-out events
     const recentActivity = (recentAttendance || [])
         .filter((a) => Boolean(a.visitorId))
         .flatMap((a) => {
@@ -131,9 +123,7 @@ export default function AdminPage() {
 
             {/* 🔹 (Optional) Building table */}
             <BuildingsTable
-                buildings={buildings}
-                stations={stations}
-                /*  attendance={attendance} */
+                buildings={lastestBuildings || []}
                 isAdmin={userData?.role === "admin"}
             />
         </div>

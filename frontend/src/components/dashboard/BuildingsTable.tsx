@@ -1,85 +1,70 @@
 interface Building {
     buildingId: string;
     buildingName: string;
-    address?: string;
-}
-
-interface Station {
-    stationId: string;
-    stationName: string;
-    buildingId?: string;
-}
-
-interface Attendance {
-    attendanceId: string;
-    buildingId?: string;
-    stationId?: string;
-    visitorId: string;
-    checkInTime?: string;
-    checkOutTime?: string;
+    stationCount: number;
+    activeVisitorsCount: number;
+    activeVisitorNames?: string[];
+    createdAt?: string;
 }
 
 export const BuildingsTable = ({
     buildings,
-    stations,
-    attendance,
     isAdmin,
 }: {
     buildings: Building[];
-    stations: Station[];
-    attendance?: Attendance[];
     isAdmin: boolean;
 }) => {
     return (
         <section className="mt-8 bg-white rounded-xl p-6 shadow-sm dark:bg-primary/10">
             <h2 className="mb-4 text-2xl font-bold text-background-dark dark:text-background-light">
-                Buildings Overview
+                🏢 Latest Buildings
             </h2>
             <div className="overflow-x-auto rounded-xl">
                 <table className="w-full text-left">
                     <thead className="text-sm font-semibold text-background-dark/80 dark:text-background-light/80">
                         <tr>
                             <th className="p-4">Building Name</th>
-                            <th className="p-4">Address</th>
-                            <th className="p-4">Occupancy</th>
-                            {isAdmin && (
-                                <th className="p-4">Active Stations</th>
-                            )}
+                            <th className="p-4">Stations</th>
+                            <th className="p-4">Active Visitors</th>
+                            <th className="p-4">Visitor Names</th>
+                            <th className="p-4">Created</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-primary/10 dark:divide-primary/20">
                         {buildings.length > 0 ? (
-                            buildings.map((building, index) => {
-                                const buildingStations = stations.filter(
-                                    (s) => s.buildingId === building.buildingId
-                                );
-
-                                return (
-                                    <tr
-                                        key={building.buildingId}
-                                        className="text-sm text-background-dark dark:text-background-light"
-                                    >
-                                        <td className="p-4">
-                                            {building.buildingName}
-                                        </td>
-                                        <td className="p-4">
-                                            {building.address || "No address"}
-                                        </td>
-                                        {/* <td className="p-4">
-                                            {buildingOccupancy} / {capacity}
-                                        </td> */}
-                                        {isAdmin && (
-                                            <td className="p-4">
-                                                {buildingStations.length} / 20
-                                            </td>
-                                        )}
-                                    </tr>
-                                );
-                            })
+                            buildings.map((b) => (
+                                <tr
+                                    key={b.buildingId}
+                                    className="text-sm text-background-dark dark:text-background-light"
+                                >
+                                    <td className="p-4 font-medium">
+                                        {b.buildingName}
+                                    </td>
+                                    <td className="p-4">{b.stationCount}</td>
+                                    <td className="p-4">
+                                        {b.activeVisitorsCount}
+                                    </td>
+                                    <td className="p-4">
+                                        {b.activeVisitorNames?.length
+                                            ? b.activeVisitorNames.join(", ")
+                                            : "—"}
+                                    </td>
+                                    <td className="p-4 text-sm text-gray-500">
+                                        {b.createdAt
+                                            ? new Date(
+                                                  b.createdAt
+                                              ).toLocaleString("sv-SE", {
+                                                  dateStyle: "short",
+                                                  timeStyle: "short",
+                                              })
+                                            : "—"}
+                                    </td>
+                                </tr>
+                            ))
                         ) : (
                             <tr>
                                 <td
-                                    colSpan={4}
+                                    colSpan={5}
                                     className="text-center py-6 text-background-dark/60 dark:text-background-light/60"
                                 >
                                     No buildings found

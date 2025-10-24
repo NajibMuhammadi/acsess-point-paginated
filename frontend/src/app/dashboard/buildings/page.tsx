@@ -29,7 +29,7 @@ import {
 import { apiRequest } from "@/utils/api";
 
 export default function BuildingsPage() {
-    const { buildings, stations, visitors, userData } = useAdminData();
+    const { buildings, stations, userData } = useAdminData();
 
     const [localBuildings, setLocalBuildings] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
@@ -60,6 +60,7 @@ export default function BuildingsPage() {
         );
         if (ok && data.success) {
             setLocalBuildings(data.buildings);
+            console.log("🏢 Paginated buildings data:", data.buildings);
             setTotalPages(data.totalPages);
             setTotal(data.total);
         }
@@ -256,6 +257,14 @@ export default function BuildingsPage() {
                                                 {buildingOccupancy}
                                             </div>
                                         </td> */}
+
+                                        {/* Capacity */}
+                                        <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
+                                            <div className="flex items-center gap-2">
+                                                <Users className="w-4 h-4 text-gray-400" />
+                                                {building.activeVisitorsCount}
+                                            </div>
+                                        </td>
 
                                         {/* Status */}
                                         <td className="px-6 py-4">

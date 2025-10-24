@@ -42,6 +42,7 @@ interface AdminContextType {
         onlineStations: number;
         currentlyCheckedIn: number;
     };
+    lastestBuildings: any[];
 }
 
 const AdminContext = createContext<AdminContextType | null>(null);
@@ -81,6 +82,7 @@ export default function AdminLayout({
     const [alarmRefreshKey, setAlarmRefreshKey] = useState(0);
     const [weeklyData, setWeeklyData] = useState<any[]>([]);
     const [recentAttendance, setRecentAttendance] = useState<any[]>([]);
+    const [lastestBuildings, setLastestBuildings] = useState<any[]>([]);
 
     const [dashboardStats, setDashboardStats] = useState({
         totalBuildings: 0,
@@ -107,7 +109,7 @@ export default function AdminLayout({
                 await Promise.all([
                     fetchUserProfile(token),
                     fetchAllBuildings(token),
-                    fetchDashboardData(token),
+                    fetchDashboardData(token), // 🟢 Hämtar ALLT dashboard-relaterat i en query
                     fetchAllStations(token),
                     fetchAllAlarms(token),
                 ]);
@@ -166,7 +168,7 @@ export default function AdminLayout({
         if (ok && data.success) setAlarms(data.alarms || []);
     }
 
-    // 🟢 Konsoliderad funktion för all dashboard-data
+    // 🟢 EN ENDA REQUEST för all dashboard-data
     async function fetchDashboardData(token: string) {
         const { ok, data } = await apiRequest(
             "/api/attendance/today",
@@ -177,6 +179,7 @@ export default function AdminLayout({
         if (ok && data.success) {
             setWeeklyData(data.data || []);
             setRecentAttendance(data.recentAttendance || []);
+            setLastestBuildings(data.latestBuildings || []);
             setDashboardStats(
                 data.stats || {
                     totalBuildings: 0,
@@ -186,6 +189,7 @@ export default function AdminLayout({
                     currentlyCheckedIn: 0,
                 }
             );
+            console.log("📊 Dashboard data hämtad", data);
         }
     }
 
@@ -207,10 +211,39 @@ export default function AdminLayout({
 
         // 🏢 Building events
         s.on("buildingCreated", (b: any) => {
+            console.log("🏢 Building created:", b);
             setBuildings((prev) => [...prev, b]);
+        });
+        s.on("buildingCapacityUpdated", (update: any) => {
+            console.log("🏢 Building capacity updated:", update);
+
+            // 🔹 Uppdatera senaste byggnader (dashboard)
+            setLastestBuildings((prev) =>
+                prev.map((b) =>
+                    b.buildingId === update.buildingId
+                        ? {
+                              ...b,
+                              activeVisitorsCount: update.activeVisitorsCount,
+                          }
+                        : b
+                )
+            );
+
+            // 🔹 Uppdatera hela byggnadslistan (för BuildingPage)
+            setBuildings((prev) =>
+                prev.map((b) =>
+                    b.buildingId === update.buildingId
+                        ? {
+                              ...b,
+                              activeVisitorsCount: update.activeVisitorsCount,
+                          }
+                        : b
+                )
+            );
         });
 
         s.on("buildingDeleted", ({ buildingId }: any) => {
+            console.log("🗑️ Building deleted:", buildingId);
             setBuildings((prev) =>
                 prev.filter((b) => b.buildingId !== buildingId)
             );
@@ -221,15 +254,20 @@ export default function AdminLayout({
                         : st
                 )
             );
+            setLastestBuildings((prev) =>
+                prev.filter((b) => b.buildingId !== buildingId)
+            );
         });
 
         // 📡 Station events
         s.on("stationCreated", (st: any) => {
+            console.log("📡 Station created:", st);
             setStations((prev) => [...prev, st]);
             setStationRefreshKey((x) => x + 1);
         });
 
         s.on("stationDeleted", ({ stationId }: any) => {
+            console.log("🗑️ Station deleted:", stationId);
             setStations((prev) =>
                 prev.filter((st) => st.stationId !== stationId)
             );
@@ -237,6 +275,7 @@ export default function AdminLayout({
         });
 
         s.on("stationMoved", ({ stationId, buildingId, buildingName }: any) => {
+            console.log("🔁 Station moved:", { stationId, buildingId });
             setStations((prev) =>
                 prev.map((st) =>
                     st.stationId === stationId
@@ -252,6 +291,10 @@ export default function AdminLayout({
         });
 
         s.on("stationApprovalUpdated", ({ stationId, isApproved }: any) => {
+            console.log("✅ Station approval updated:", {
+                stationId,
+                isApproved,
+            });
             setStations((prev) =>
                 prev.map((st) =>
                     st.stationId === stationId ? { ...st, isApproved } : st
@@ -261,6 +304,7 @@ export default function AdminLayout({
         });
 
         s.on("stationStatusUpdated", (data: any) => {
+            console.log("💓 Station status updated:", data);
             setStations((prev) =>
                 prev.map((st) =>
                     st.stationId === data.stationId
@@ -275,13 +319,20 @@ export default function AdminLayout({
             setStationRefreshKey((x) => x + 1);
         });
 
+        s.on("stationStatsUpdated", (update: any) => {
+            console.log("📊 Station stats updated:", update);
+            // Station-specifika stats uppdateras här om du visar dem någonstans
+        });
+
         // 🚨 Alarm events
         s.on("alarmTriggered", (alarm: any) => {
+            console.log("🚨 Alarm triggered:", alarm);
             setAlarms((prev) => [alarm, ...prev]);
             setAlarmRefreshKey((x) => x + 1);
         });
 
         s.on("alarmAcknowledged", (data: any) => {
+            console.log("✅ Alarm acknowledged:", data);
             setAlarms((prev) =>
                 prev.map((a) =>
                     a.alarmId === data.alarmId
@@ -297,17 +348,38 @@ export default function AdminLayout({
             setAlarmRefreshKey((x) => x + 1);
         });
 
-        // 📊 Dashboard stats events
+        // 📊 Dashboard stats events (LÄTTA UPDATES)
         s.on("weeklyTrendsUpdated", (data: any[]) => {
+            console.log("📈 Weekly trends updated (full refresh)");
             setWeeklyData(data);
         });
 
         s.on("recentAttendanceUpdated", (recent: any[]) => {
+            console.log("📋 Recent attendance updated");
             setRecentAttendance(recent);
         });
 
+        s.on("latestBuildingsUpdated", (buildings: any[]) => {
+            console.log("🏢 Latest buildings updated");
+            setLastestBuildings(buildings);
+        });
+
+        s.on("currentlyCheckedInUpdated", (count: number) => {
+            console.log("👥 Currently checked in updated:", count);
+            setDashboardStats((prev) => ({
+                ...prev,
+                currentlyCheckedIn: count,
+            }));
+        });
+
         s.on("dashboardStatsUpdated", (stats: any) => {
+            console.log("📊 Dashboard stats updated (lightweight):", stats);
             setDashboardStats(stats);
+        });
+
+        s.on("attendanceUpdated", (attendance: any) => {
+            console.log("✅ Attendance record updated:", attendance);
+            // Om du vill visa senaste attendance i realtid kan du uppdatera här
         });
 
         return s;
@@ -338,6 +410,7 @@ export default function AdminLayout({
                     weeklyData,
                     recentAttendance,
                     dashboardStats,
+                    lastestBuildings,
                 }}
             >
                 <DashboardLayout

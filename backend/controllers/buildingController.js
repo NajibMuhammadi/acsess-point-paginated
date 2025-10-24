@@ -6,36 +6,43 @@ import {
     getStationsCollection,
     getAttendanceCollection,
 } from "../config/db.js";
+import { emitLatestBuildings } from "./attendanceController.js";
 
 /* =======================================================
-   🔄 HELPER: Uppdatera dashboard stats
+   🔄 LIGHTWEIGHT: Räkna endast vad som ändrats
    ======================================================= */
-async function emitDashboardStats(companyId) {
+async function emitLightweightStats(companyId) {
     try {
         const stationsCol = getStationsCollection();
         const buildingsCol = getBuildingsCollection();
         const attendanceCol = getAttendanceCollection();
 
-        const [allStations, allBuildings, currentlyCheckedInResult] =
-            await Promise.all([
-                stationsCol.find({ companyId }).toArray(),
-                buildingsCol.find({ companyId }).toArray(),
-                attendanceCol
-                    .aggregate([
-                        { $match: { companyId, checkOutTime: null } },
-                        { $count: "total" },
-                    ])
-                    .toArray(),
-            ]);
+        // 🟢 Parallella queries (snabba)
+        const [
+            totalBuildings,
+            totalStations,
+            activeStations,
+            onlineStations,
+            currentlyCheckedInResult,
+        ] = await Promise.all([
+            buildingsCol.countDocuments({ companyId }),
+            stationsCol.countDocuments({ companyId }),
+            stationsCol.countDocuments({
+                companyId,
+                buildingId: { $ne: null, $exists: true },
+            }),
+            stationsCol.countDocuments({
+                companyId,
+                $or: [{ status: "online" }, { isOnline: true }],
+            }),
+            attendanceCol
+                .aggregate([
+                    { $match: { companyId, checkOutTime: null } },
+                    { $count: "total" },
+                ])
+                .toArray(),
+        ]);
 
-        const totalStations = allStations.length;
-        const activeStations = allStations.filter(
-            (s) => s.buildingId !== null && s.buildingId !== undefined
-        ).length;
-        const onlineStations = allStations.filter(
-            (s) => s.status === "online" || s.isOnline === true
-        ).length;
-        const totalBuildings = allBuildings.length;
         const currentlyCheckedIn = currentlyCheckedInResult[0]?.total || 0;
 
         const stats = {
@@ -47,11 +54,11 @@ async function emitDashboardStats(companyId) {
         };
 
         io.to(companyId).emit("dashboardStatsUpdated", stats);
-        console.log("📈 Dashboard stats updated:", stats);
+        console.log("⚡ Lightweight stats updated:", stats);
 
         return stats;
     } catch (err) {
-        console.error("❌ Error emitting dashboard stats:", err);
+        console.error("❌ Error emitting lightweight stats:", err);
         return null;
     }
 }
@@ -104,9 +111,10 @@ export async function createBuilding(req, res) {
 
         await buildingsCol.insertOne(newBuilding);
 
-        // 🔔 Skicka realtidsuppdateringar
+        // 🔔 Skicka endast nödvändiga updates
         io.to(userCompanyId).emit("buildingCreated", newBuilding);
-        await emitDashboardStats(userCompanyId); // 🟢 Uppdatera stats
+        await emitLightweightStats(userCompanyId); // 🟢 Lätt update
+        await emitLatestBuildings(userCompanyId);
 
         res.json({
             success: true,
@@ -141,10 +149,6 @@ export async function getAllBuildings(req, res) {
         if (search.trim()) {
             matchStage.buildingName = { $regex: search.trim(), $options: "i" };
         }
-
-        console.log("🏢 [getAllBuildings] companyId:", companyId);
-        console.log("🔎 matchStage:", matchStage);
-        console.log("📄 page:", pageNum, "limit:", limitNum);
 
         const pipeline = [
             { $match: matchStage },
@@ -235,17 +239,6 @@ export async function getAllBuildings(req, res) {
             buildingsCol.countDocuments(matchStage),
         ]);
 
-        console.log(
-            "✅ [getAllBuildings] Byggnader hittade:",
-            buildings.length
-        );
-        buildings.forEach((b) => {
-            console.log(
-                `🏠 ${b.buildingName} → ${b.activeVisitorsCount} aktiva besökare`,
-                b.activeVisitorNames?.length ? b.activeVisitorNames : "🕳️ inga"
-            );
-        });
-
         res.json({
             success: true,
             buildings,
@@ -307,9 +300,9 @@ export async function deleteBuilding(req, res) {
                 .json({ success: false, message: "Byggnad hittades inte" });
         }
 
-        // 🔔 Skicka realtidsuppdateringar
+        // 🔔 Skicka endast nödvändiga updates
         io.to(userCompanyId).emit("buildingDeleted", { buildingId });
-        await emitDashboardStats(userCompanyId); // 🟢 Uppdatera stats
+        await emitLightweightStats(userCompanyId); // 🟢 Lätt update
 
         res.json({ success: true, message: "Byggnad raderad" });
     } catch (err) {

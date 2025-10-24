@@ -9,12 +9,113 @@ import {
 } from "../config/db.js";
 
 // ============================================================
-// 🔹 HELPER: Uppdatera weekly trends
+// 🚀 OPTIMERAD: Minimal real-time update vid check-in/out
 // ============================================================
+async function emitMinimalRealtimeUpdate(companyId, buildingId, stationId) {
+    try {
+        const attendanceCol = getAttendanceCollection();
+        const now = new Date();
+
+        // 🟢 Räkna ENDAST currently checked in (snabb query)
+        const currentlyCheckedIn = await attendanceCol.countDocuments({
+            companyId,
+            checkOutTime: null,
+        });
+
+        // 🟢 Hämta ENDAST de 5 senaste attendance records
+        const recentAttendance = await attendanceCol
+            .aggregate([
+                { $match: { companyId } },
+                { $sort: { checkInTime: -1 } },
+                { $limit: 5 },
+                {
+                    $lookup: {
+                        from: "visitors",
+                        localField: "visitorId",
+                        foreignField: "visitorId",
+                        as: "visitorInfo",
+                    },
+                },
+                {
+                    $unwind: {
+                        path: "$visitorInfo",
+                        preserveNullAndEmptyArrays: true,
+                    },
+                },
+                {
+                    $addFields: {
+                        type: "$visitorInfo.type",
+                        phoneNumber: "$visitorInfo.phoneNumber",
+                    },
+                },
+                { $project: { visitorInfo: 0 } },
+            ])
+            .toArray();
+
+        // 🟢 Räkna aktiva besökare ENDAST för berörd byggnad
+        let buildingUpdate = null;
+        if (buildingId) {
+            const activeCount = await attendanceCol.countDocuments({
+                companyId,
+                buildingId,
+                checkOutTime: null,
+            });
+
+            buildingUpdate = {
+                buildingId,
+                activeVisitorsCount: activeCount,
+            };
+        }
+
+        // 🟢 Räkna check-ins ENDAST för berörd station (dagens datum)
+        let stationUpdate = null;
+        if (stationId) {
+            const startOfDay = new Date(now);
+            startOfDay.setHours(0, 0, 0, 0);
+
+            const todayCount = await attendanceCol.countDocuments({
+                companyId,
+                stationId,
+                checkInTime: { $gte: startOfDay },
+            });
+
+            const activeAtStation = await attendanceCol.countDocuments({
+                companyId,
+                stationId,
+                checkOutTime: null,
+            });
+
+            stationUpdate = {
+                stationId,
+                todayCheckInCount: todayCount,
+                activeVisitorsCount: activeAtStation,
+            };
+        }
+
+        // 🔔 Emittera ENDAST nödvändiga updates
+        io.to(companyId).emit("currentlyCheckedInUpdated", currentlyCheckedIn);
+        io.to(companyId).emit("recentAttendanceUpdated", recentAttendance);
+
+        if (buildingUpdate) {
+            io.to(companyId).emit("buildingCapacityUpdated", buildingUpdate);
+        }
+
+        if (stationUpdate) {
+            io.to(companyId).emit("stationStatsUpdated", stationUpdate);
+        }
+
+        console.log("⚡ Minimal realtime update sent");
+        return { currentlyCheckedIn, recentAttendance };
+    } catch (err) {
+        console.error("❌ Error in minimal realtime update:", err);
+        return null;
+    }
+}
+
 // ============================================================
-// 🔹 HELPER: Uppdatera weekly trends + station/building stats
+// 🔹 HELPER: Full weekly trends (körs ENDAST vid sida-laddning)
 // ============================================================
-async function emitWeeklyTrends(companyId) {
+export async function emitWeeklyTrends(companyId) {
     try {
         const attendanceCol = getAttendanceCollection();
         const stationsCol = getStationsCollection();
@@ -28,15 +129,14 @@ async function emitWeeklyTrends(companyId) {
         sevenDaysAgo.setHours(0, 0, 0, 0);
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
 
-        // 🟢 Kör ALLA aggregationer parallellt (inkl. stations & buildings)
         const [
             weeklyResult,
             currentlyCheckedInResult,
             recentAttendance,
             allStations,
             allBuildings,
+            FiveLatestBuildings,
         ] = await Promise.all([
-            // Pipeline 1: Weekly trends
             attendanceCol
                 .aggregate([
                     {
@@ -72,33 +172,18 @@ async function emitWeeklyTrends(companyId) {
                 ])
                 .toArray(),
 
-            // Pipeline 2: Currently checked in
             attendanceCol
                 .aggregate([
-                    {
-                        $match: {
-                            companyId,
-                            checkOutTime: null,
-                        },
-                    },
-                    {
-                        $count: "total",
-                    },
+                    { $match: { companyId, checkOutTime: null } },
+                    { $count: "total" },
                 ])
                 .toArray(),
 
-            // Pipeline 3: Recent 5 attendance records MED visitor info
             attendanceCol
                 .aggregate([
-                    {
-                        $match: { companyId },
-                    },
-                    {
-                        $sort: { checkInTime: -1 },
-                    },
-                    {
-                        $limit: 5,
-                    },
+                    { $match: { companyId } },
+                    { $sort: { checkInTime: -1 } },
+                    { $limit: 5 },
                     {
                         $lookup: {
                             from: "visitors",
@@ -119,24 +204,119 @@ async function emitWeeklyTrends(companyId) {
                             phoneNumber: "$visitorInfo.phoneNumber",
                         },
                     },
+                    { $project: { visitorInfo: 0 } },
+                ])
+                .toArray(),
+
+            stationsCol.find({ companyId }).toArray(),
+            buildingsCol.find({ companyId }).toArray(),
+
+            buildingsCol
+                .aggregate([
+                    { $match: { companyId } },
+                    { $sort: { createdAt: -1 } },
+                    { $limit: 5 },
+                    {
+                        $lookup: {
+                            from: "stations",
+                            let: { bId: "$buildingId", cId: "$companyId" },
+                            pipeline: [
+                                {
+                                    $match: {
+                                        $expr: {
+                                            $and: [
+                                                {
+                                                    $eq: [
+                                                        "$buildingId",
+                                                        "$$bId",
+                                                    ],
+                                                },
+                                                {
+                                                    $eq: [
+                                                        "$companyId",
+                                                        "$$cId",
+                                                    ],
+                                                },
+                                            ],
+                                        },
+                                    },
+                                },
+                                {
+                                    $project: {
+                                        _id: 0,
+                                        stationId: 1,
+                                        isOnline: 1,
+                                    },
+                                },
+                            ],
+                            as: "stations",
+                        },
+                    },
+                    {
+                        $lookup: {
+                            from: "attendance",
+                            let: { bId: "$buildingId", cId: "$companyId" },
+                            pipeline: [
+                                {
+                                    $match: {
+                                        $expr: {
+                                            $and: [
+                                                {
+                                                    $eq: [
+                                                        "$buildingId",
+                                                        "$$bId",
+                                                    ],
+                                                },
+                                                {
+                                                    $eq: [
+                                                        "$companyId",
+                                                        "$$cId",
+                                                    ],
+                                                },
+                                                {
+                                                    $eq: [
+                                                        "$checkOutTime",
+                                                        null,
+                                                    ],
+                                                },
+                                            ],
+                                        },
+                                    },
+                                },
+                                {
+                                    $project: {
+                                        _id: 0,
+                                        visitorName: 1,
+                                        checkInTime: 1,
+                                    },
+                                },
+                            ],
+                            as: "activeVisitors",
+                        },
+                    },
+                    {
+                        $addFields: {
+                            stationCount: { $size: "$stations" },
+                            activeVisitorsCount: { $size: "$activeVisitors" },
+                            activeVisitorNames: "$activeVisitors.visitorName",
+                        },
+                    },
                     {
                         $project: {
-                            visitorInfo: 0,
+                            _id: 0,
+                            buildingId: 1,
+                            buildingName: 1,
+                            createdAt: 1,
+                            stationCount: 1,
+                            activeVisitorsCount: 1,
+                            activeVisitorNames: 1,
                         },
                     },
                 ])
                 .toArray(),
-
-            // 🟢 Pipeline 4: Hämta alla stations för företaget
-            stationsCol.find({ companyId }).toArray(),
-
-            // 🟢 Pipeline 5: Hämta alla buildings för företaget
-            buildingsCol.find({ companyId }).toArray(),
         ]);
 
         const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-        // 🟢 Processa weekly trends
         const dataMap = new Map(
             weeklyResult.map((r) => [
                 r._id,
@@ -167,7 +347,6 @@ async function emitWeeklyTrends(companyId) {
 
         const currentlyCheckedIn = currentlyCheckedInResult[0]?.total || 0;
 
-        // 🟢 Beräkna station-statistik
         const totalStations = allStations.length;
         const activeStations = allStations.filter(
             (s) => s.buildingId !== null && s.buildingId !== undefined
@@ -176,10 +355,8 @@ async function emitWeeklyTrends(companyId) {
             (s) => s.status === "online" || s.isOnline === true
         ).length;
 
-        // 🟢 Beräkna building-statistik
         const totalBuildings = allBuildings.length;
 
-        // 🟢 Skapa stats-objekt
         const stats = {
             totalBuildings,
             totalStations,
@@ -188,26 +365,101 @@ async function emitWeeklyTrends(companyId) {
             currentlyCheckedIn,
         };
 
-        // 🟢 Emittera ALLA events
         io.to(companyId).emit("weeklyTrendsUpdated", formatted);
         io.to(companyId).emit("currentlyCheckedInUpdated", currentlyCheckedIn);
         io.to(companyId).emit("recentAttendanceUpdated", recentAttendance);
-        io.to(companyId).emit("dashboardStatsUpdated", stats); // 🟢 Ny event
+        io.to(companyId).emit("dashboardStatsUpdated", stats);
+        io.to(companyId).emit("latestBuildingsUpdated", FiveLatestBuildings);
 
-        console.log("📊 Weekly trends:", formatted);
-        console.log("👥 Currently checked in:", currentlyCheckedIn);
-        console.log("🕐 Recent attendance:", recentAttendance);
-        console.log("📈 Dashboard stats:", stats);
+        console.log("📊 Weekly trends sent (FULL refresh)");
 
-        return { formatted, currentlyCheckedIn, recentAttendance, stats };
+        return {
+            formatted,
+            currentlyCheckedIn,
+            recentAttendance,
+            stats,
+            FiveLatestBuildings,
+        };
     } catch (err) {
         console.error("❌ Error emitting weekly trends:", err);
         return null;
     }
 }
+
 // ============================================================
-// 🔹 POST /api/attendance/attendance-uid
-//    Station pingar när kort läses – registrerar in/ut
+// 🏢 HELPER: Light update av senaste 5 byggnader (för realtidsuppdatering)
+// ============================================================
+export async function emitLatestBuildings(companyId) {
+    try {
+        const buildingsCol = getBuildingsCollection();
+        const stationsCol = getStationsCollection();
+        const attendanceCol = getAttendanceCollection();
+
+        // 🟢 Hämta de 5 senaste byggnaderna snabbt (sort + limit)
+        const latestBuildings = await buildingsCol
+            .find({ companyId })
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .toArray();
+
+        if (latestBuildings.length === 0) {
+            io.to(companyId).emit("latestBuildingsUpdated", []);
+            return [];
+        }
+
+        // 🟢 Hämta stationer och aktiva besökare parallellt
+        const buildingIds = latestBuildings.map((b) => b.buildingId);
+
+        const [stations, activeAttendances] = await Promise.all([
+            stationsCol
+                .find({ companyId, buildingId: { $in: buildingIds } })
+                .project({ _id: 0, buildingId: 1 })
+                .toArray(),
+            attendanceCol
+                .find({
+                    companyId,
+                    buildingId: { $in: buildingIds },
+                    checkOutTime: null,
+                })
+                .project({ _id: 0, buildingId: 1, visitorName: 1 })
+                .toArray(),
+        ]);
+
+        // 🧩 Beräkna totals per byggnad
+        const buildingData = latestBuildings.map((b) => {
+            const stationCount = stations.filter(
+                (s) => s.buildingId === b.buildingId
+            ).length;
+
+            const activeVisitors = activeAttendances.filter(
+                (a) => a.buildingId === b.buildingId
+            );
+            const activeVisitorsCount = activeVisitors.length;
+            const activeVisitorNames = activeVisitors.map((v) => v.visitorName);
+
+            return {
+                buildingId: b.buildingId,
+                buildingName: b.buildingName,
+                createdAt: b.createdAt,
+                stationCount,
+                activeVisitorsCount,
+                activeVisitorNames,
+            };
+        });
+
+        // 🔔 Emitera uppdatering till alla admins i företaget
+        io.to(companyId).emit("latestBuildingsUpdated", buildingData);
+        console.log("🏢 latestBuildingsUpdated (light) sent");
+
+        return buildingData;
+    } catch (err) {
+        console.error("❌ Error emitting latest buildings:", err);
+        return [];
+    }
+}
+
+// ============================================================
+// 🔹 POST /api/attendance/attendance-uid (OPTIMERAD)
 // ============================================================
 export async function attendance(req, res) {
     const { uid, visitorName, phoneNumber, type } = req.body;
@@ -301,9 +553,15 @@ export async function attendance(req, res) {
             await attendanceCol.insertOne(attendanceRecord);
         }
 
-        // Skicka realtidsuppdateringar
+        // 🚀 Skicka attendance event först (snabbast)
         io.to(companyId).emit("attendanceUpdated", attendanceRecord);
-        await emitWeeklyTrends(companyId); // 🟢 Lägg till denna rad
+
+        // 🚀 Kör MINIMAL realtime update (bara nödvändiga queries)
+        await emitMinimalRealtimeUpdate(
+            companyId,
+            station.buildingId,
+            station.stationId
+        );
 
         return res.json({
             success: true,
@@ -317,8 +575,7 @@ export async function attendance(req, res) {
 }
 
 // ============================================================
-// 🔹 GET /api/attendance/paginated?page=1&limit=25&search=
-//    Admins kan bläddra i alla poster
+// 🔹 GET /api/attendance/paginated
 // ============================================================
 export async function getAllAttendance(req, res) {
     try {
@@ -370,6 +627,9 @@ export async function getAllAttendance(req, res) {
     }
 }
 
+// ============================================================
+// 🔹 GET /api/attendance/today (körs vid sida-laddning)
+// ============================================================
 export async function getAttendanceToday(req, res) {
     try {
         const companyId = req.user.companyId;
@@ -382,8 +642,13 @@ export async function getAttendanceToday(req, res) {
             });
         }
 
-        const { formatted, currentlyCheckedIn, recentAttendance, stats } =
-            result;
+        const {
+            formatted,
+            currentlyCheckedIn,
+            recentAttendance,
+            stats,
+            FiveLatestBuildings,
+        } = result;
 
         res.json({
             success: true,
@@ -391,8 +656,9 @@ export async function getAttendanceToday(req, res) {
             totalCheckOuts: formatted.reduce((a, b) => a + b.checkOuts, 0),
             currentlyCheckedIn,
             recentAttendance,
-            stats, // 🟢 Lägg till stats
+            stats,
             data: formatted,
+            latestBuildings: FiveLatestBuildings,
         });
     } catch (err) {
         console.error("❌ Error in getAttendanceToday:", err);

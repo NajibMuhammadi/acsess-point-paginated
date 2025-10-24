@@ -7,36 +7,42 @@ import {
     getAttendanceCollection,
 } from "../config/db.js";
 import jwt from "jsonwebtoken";
+import { emitLatestBuildings } from "./attendanceController.js";
 
 /* =======================================================
-   🔄 HELPER: Uppdatera dashboard stats
+   🔄 LIGHTWEIGHT: Räkna endast vad som ändrats
    ======================================================= */
-async function emitDashboardStats(companyId) {
+async function emitLightweightStats(companyId) {
     try {
         const stationsCol = getStationsCollection();
         const buildingsCol = getBuildingsCollection();
         const attendanceCol = getAttendanceCollection();
 
-        const [allStations, allBuildings, currentlyCheckedInResult] =
-            await Promise.all([
-                stationsCol.find({ companyId }).toArray(),
-                buildingsCol.find({ companyId }).toArray(),
-                attendanceCol
-                    .aggregate([
-                        { $match: { companyId, checkOutTime: null } },
-                        { $count: "total" },
-                    ])
-                    .toArray(),
-            ]);
+        const [
+            totalBuildings,
+            totalStations,
+            activeStations,
+            onlineStations,
+            currentlyCheckedInResult,
+        ] = await Promise.all([
+            buildingsCol.countDocuments({ companyId }),
+            stationsCol.countDocuments({ companyId }),
+            stationsCol.countDocuments({
+                companyId,
+                buildingId: { $ne: null, $exists: true },
+            }),
+            stationsCol.countDocuments({
+                companyId,
+                $or: [{ status: "online" }, { isOnline: true }],
+            }),
+            attendanceCol
+                .aggregate([
+                    { $match: { companyId, checkOutTime: null } },
+                    { $count: "total" },
+                ])
+                .toArray(),
+        ]);
 
-        const totalStations = allStations.length;
-        const activeStations = allStations.filter(
-            (s) => s.buildingId !== null && s.buildingId !== undefined
-        ).length;
-        const onlineStations = allStations.filter(
-            (s) => s.status === "online" || s.isOnline === true
-        ).length;
-        const totalBuildings = allBuildings.length;
         const currentlyCheckedIn = currentlyCheckedInResult[0]?.total || 0;
 
         const stats = {
@@ -48,11 +54,11 @@ async function emitDashboardStats(companyId) {
         };
 
         io.to(companyId).emit("dashboardStatsUpdated", stats);
-        console.log("📈 Dashboard stats updated:", stats);
+        console.log("⚡ Lightweight stats updated:", stats);
 
         return stats;
     } catch (err) {
-        console.error("❌ Error emitting dashboard stats:", err);
+        console.error("❌ Error emitting lightweight stats:", err);
         return null;
     }
 }
@@ -110,9 +116,9 @@ export async function createStation(req, res) {
 
         await stationsCol.insertOne(newStation);
 
-        // 🔔 Realtidsuppdateringar
+        // 🔔 Lätta realtidsuppdateringar
         io.to(userCompanyId).emit("stationCreated", newStation);
-        await emitDashboardStats(userCompanyId); // 🟢 Uppdatera stats
+        await emitLightweightStats(userCompanyId);
 
         res.json({
             success: true,
@@ -292,14 +298,6 @@ export async function getAllStations(req, res) {
             stationsCol.countDocuments(matchStage),
         ]);
 
-        console.log("✅ [getAllStations] Stationer hittade:", stations.length);
-        stations.forEach((s) => {
-            console.log(
-                `📍 ${s.stationName} → ${s.activeVisitorsCount} aktiva besökare`,
-                s.activeVisitorNames?.length ? s.activeVisitorNames : "🕳️ inga"
-            );
-        });
-
         res.json({
             success: true,
             stations,
@@ -382,13 +380,14 @@ export async function moveStation(req, res) {
             stationId,
         });
 
-        // 🔔 Realtidsuppdateringar
+        // 🔔 Lätta realtidsuppdateringar
         io.to(companyId).emit("stationMoved", {
             stationId,
             buildingId: buildingId?.trim() || null,
             buildingName: buildingName || null,
         });
-        await emitDashboardStats(companyId); // 🟢 Uppdatera stats
+        await emitLightweightStats(companyId);
+        await emitLatestBuildings(companyId);
 
         res.json({
             success: true,
@@ -465,9 +464,10 @@ export async function deleteStation(req, res) {
             });
         }
 
-        // 🔔 Realtidsuppdateringar
+        // 🔔 Lätta realtidsuppdateringar
         io.to(userCompanyId).emit("stationDeleted", { stationId });
-        await emitDashboardStats(userCompanyId); // 🟢 Uppdatera stats
+        await emitLightweightStats(userCompanyId);
+        await emitLatestBuildings(userCompanyId);
 
         res.json({
             success: true,
